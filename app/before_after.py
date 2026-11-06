@@ -179,7 +179,7 @@ def week_link(before: np.ndarray, after: np.ndarray) -> float | None:
 
 # ------------------------------------------------------------------------- checks
 
-def run_checks_ba(df, spec, daily: pd.Series, b: Blocks, kind: str, unit_pts: bool) -> list[Check]:
+def run_checks_ba(df, spec, daily: pd.Series, b: Blocks, kind: str, unit_pts: bool, gap: bool = False) -> list[Check]:
     checks: list[Check] = []
     nb, na = len(b.before), len(b.after)
     smallest = min(nb, na)
@@ -224,15 +224,21 @@ def run_checks_ba(df, spec, daily: pd.Series, b: Blocks, kind: str, unit_pts: bo
     pt = pre_trend(b.before)
     if pt is None:
         checks.append(Check(name="Steady before", status="info",
-                            message="Too few weeks before to tell if it was already drifting."))
+                            message="Too few weeks before to tell if the groups moved in parallel." if gap
+                            else "Too few weeks before to tell if it was already drifting."))
     elif pt["p"] < ALPHA:
         mv = pt["slope"]
         amt = f"{abs(mv) * 100:.1f} pts" if unit_pts else fmt_num(abs(mv))
-        checks.append(Check(name="Steady before", status="warn",
-                            message=f"Already {'rising' if mv > 0 else 'falling'} before: about {amt} a week. "
-                                    f"A before/after gap may just be that drift."))
+        if gap:
+            msg = (f"The gap was already {'widening' if mv > 0 else 'narrowing'} before: about {amt} a week. "
+                   f"The groups weren't moving in parallel.")
+        else:
+            msg = (f"Already {'rising' if mv > 0 else 'falling'} before: about {amt} a week. "
+                   f"A before/after gap may just be that drift.")
+        checks.append(Check(name="Steady before", status="warn", message=msg))
     else:
-        checks.append(Check(name="Steady before", status="pass", message="Flat before the date."))
+        checks.append(Check(name="Steady before", status="pass",
+                            message="Groups moved in parallel before the date." if gap else "Flat before the date."))
 
     # Do neighbouring weeks move together?
     r = week_link(b.before, b.after)
@@ -273,16 +279,34 @@ def _pretty(ts: pd.Timestamp) -> str:
     return f"{ts.strftime('%b')} {ts.day}, {ts.year}"
 
 
-def _series(b: Blocks, change: pd.Timestamp, a_mean: float, b_mean: float, unit_pts: bool) -> dict:
-    cal = b.cal
+def clean_list(v) -> list:
+    return [None if not np.isfinite(x) else float(x) for x in v]
+
+
+def smooth_sides(cal: pd.Series, change: pd.Timestamp) -> pd.Series:
+    """7-day centred average, computed separately on each side so it never crosses the date."""
     smooth = pd.Series(index=cal.index, dtype=float)
-    pre, post = cal[cal.index < change], cal[cal.index >= change]
-    for part in (pre, post):
+    for part in (cal[cal.index < change], cal[cal.index >= change]):
         if len(part):
             smooth.loc[part.index] = part.rolling(7, center=True, min_periods=4).mean()
+    return smooth
 
-    def clean(v):
-        return [None if not np.isfinite(x) else float(x) for x in v]
+
+def repro_block(n_rows: int, nb: int, na: int, data_sha: str, csv_name: str) -> tuple[dict, str]:
+    versions = {"python": sys.version.split()[0], "pandas": pd.__version__, "numpy": np.__version__,
+                "scipy": scipy.__version__, "statsmodels": statsmodels.__version__}
+    repro = {"data_sha256": data_sha, "rows_used": int(n_rows), "weeks_used": f"{nb} before, {na} after",
+             "seed": SEED, "versions": versions}
+    header = (f"# Dashboarder reproduction script\n"
+              f"# Data fingerprint (sha256): {data_sha or 'n/a'}\n"
+              f"# Built with: " + ", ".join(f"{k} {v}" for k, v in versions.items()) + "\n\n")
+    return repro, header
+
+
+def _series(b: Blocks, change: pd.Timestamp, a_mean: float, b_mean: float, unit_pts: bool) -> dict:
+    cal = b.cal
+    smooth = smooth_sides(cal, change)
+    clean = clean_list
     return {
         "dates": [d.date().isoformat() for d in cal.index],
         "values": clean(cal.to_numpy(float)),
@@ -325,13 +349,7 @@ def analyze(df: pd.DataFrame, spec: BeforeAfterSpec, csv_name: str = "your_file.
     rep = _apply_mode_ba(rep, df, spec, change, b, kind, unit_pts, mode)
     rep = attach_method_info_ba(rep, mode, checks, len(b.before), len(b.after))
 
-    versions = {"python": sys.version.split()[0], "pandas": pd.__version__, "numpy": np.__version__,
-                "scipy": scipy.__version__, "statsmodels": statsmodels.__version__}
-    rep.repro = {"data_sha256": data_sha, "rows_used": int(len(valid_rows)),
-                 "weeks_used": f"{len(b.before)} before, {len(b.after)} after", "seed": SEED, "versions": versions}
-    header = (f"# Dashboarder reproduction script\n"
-              f"# Data fingerprint (sha256): {data_sha or 'n/a'}\n"
-              f"# Built with: " + ", ".join(f"{k} {v}" for k, v in versions.items()) + "\n\n")
+    rep.repro, header = repro_block(len(valid_rows), len(b.before), len(b.after), data_sha, csv_name)
     rep.script = build_ba_script(spec, csv_name, mode, header)
     return rep
 
@@ -399,7 +417,7 @@ def _assemble_ba(spec, change, b: Blocks, kind, label, unit_pts, checks) -> Repo
     ]
     return Report(
         analysis="before_after", headline=headline, answer=answer, how_sure=how_sure, verdict=verdict,
-        causal_label=causal, checks=checks, arms=arms,
+        causal_label=causal, design="one_date", checks=checks, arms=arms,
         effect={"diff": diff, "ci_low": lo, "ci_high": hi, "p_value": p_value, "rel": None if rel != rel else rel,
                 "mde": mde, "unit_pts": unit_pts},
         outcome_kind=kind, outcome_label=label, cannot_tell=cannot, audit=audit, spec=spec,
@@ -434,7 +452,8 @@ def _cross_text(e, main_clear, main_diff, ds) -> tuple[str, bool, bool]:
     return f"{word}. {ds(e['diff'])}; if nothing changed: {chance_phrase(e['p'])}.", agrees or weak, weak
 
 
-def robustness_ba(b: Blocks, change, main_clear, main_diff, unit_pts) -> tuple[list[Robustness], list[str]]:
+def robustness_ba(b: Blocks, change, main_clear, main_diff, unit_pts,
+                  noun: str = "number") -> tuple[list[Robustness], list[str]]:
     _, ds, _ = _fmt(unit_pts)
     out: list[Robustness] = []
     skipped: list[str] = []
@@ -456,7 +475,7 @@ def robustness_ba(b: Blocks, change, main_clear, main_diff, unit_pts) -> tuple[l
     e = trend_adjusted(b.before, b.after)
     text, agrees, weak = _cross_text(e, main_clear, main_diff, ds)
     out.append(Robustness(key="its", name="Allowing for a trend",
-                          description="Lets the number have been drifting already, then asks if there is still a jump.",
+                          description=f"Lets the {noun} have been drifting already, then asks if there is still a jump.",
                           result=text, agrees=agrees, weak=weak, p_value=e["p"]))
 
     if len(b.before) > WINDOW_WEEKS and len(b.after) > WINDOW_WEEKS:
@@ -479,10 +498,11 @@ def robustness_ba(b: Blocks, change, main_clear, main_diff, unit_pts) -> tuple[l
     return out, skipped
 
 
-def segment_scan_ba(df: pd.DataFrame, spec: BeforeAfterSpec, change) -> tuple[list[Segment], str]:
+def segment_scan_ba(df: pd.DataFrame, spec, change, daily_fn=None, skip=()) -> tuple[list[Segment], str]:
+    daily_fn = daily_fn or (lambda part: daily_series(part, spec))
     rows = []
     for col in df.columns:
-        if col in (spec.date_col, spec.outcome_col) or is_idlike(df, col):
+        if col in (spec.date_col, spec.outcome_col, *skip) or is_idlike(df, col):
             continue
         s = df[col]
         if pd.api.types.is_numeric_dtype(s) or not (2 <= s.nunique(dropna=True) <= MAX_LEVELS):
@@ -492,8 +512,11 @@ def segment_scan_ba(df: pd.DataFrame, spec: BeforeAfterSpec, change) -> tuple[li
             part = df[s_str == level]
             if part[spec.outcome_col].notna().sum() == 0:
                 continue
-            bl = make_blocks(daily_series(part, spec), change) if len(part) else None
-            if bl is None or bl.cal.index[0] >= change or bl.cal.index[-1] < change:
+            daily = daily_fn(part) if len(part) else None
+            if daily is None or daily.notna().sum() == 0:
+                continue
+            bl = make_blocks(daily, change)
+            if bl.cal.index[0] >= change or bl.cal.index[-1] < change:
                 continue
             if len(bl.before) < MIN_SEG_WEEKS or len(bl.after) < MIN_SEG_WEEKS:
                 continue

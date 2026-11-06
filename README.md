@@ -35,3 +35,14 @@ Ask a business question, upload a CSV, get a plain-language A/B test report.
   linked neighbouring days don't fake precision (simulated coverage ~95%). Cross-checks: fake date, allowing for a trend,
   nearby weeks only, day-by-day model. Research mode scans slices. Sample: `sample_data/signup_page_change.csv`
   (made by `tools/make_signup_sample.py`; planted truth is in its docstring).
+
+## "How did people get it?" (app/design.py)
+An up-front question picks the method **and** the wording of the verdict:
+🎲 random split → A/B test (plus a "Groups alike" balance check) · 📅 everyone from a date → before/after ·
+⚖️ from a date, some never got it → before/after **with a comparison group** (difference-in-differences) ·
+🙋 they chose / 🤷 not sure → **adjusted comparison** (worded "goes with", never "raised"; includes a hidden-factor / E-value note).
+Quick mode preselects a best guess and shows it in the "Assumed:" strip; the other modes require a tap.
+Cutoff-style designs are not covered yet.
+
+Samples with planted truths: `regional_rollout.csv` (true extra effect +2.4 pts) and `loyalty_program.csv` (true effect +$5; raw gap is far larger).
+Tests: `tests/test_designs.py`.

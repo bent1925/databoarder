@@ -147,6 +147,17 @@
   @keyframes s { to { transform: rotate(360deg); } }
   table.preview td, table.preview th { white-space: nowrap; font-size: 13px; }
   .scroll { overflow-x: auto; }
+  .designs { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
+  .designs .mode { padding: 12px 10px; background: #fff; font: inherit; color: var(--ink); }
+  .designs .mode .e { font-size: 30px; } .designs .mode b { font-size: 15px; }
+  .designs .mode.on { background: var(--purple-soft); }
+  .designs .mode:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .covchips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .covchip { display: inline-flex; gap: 6px; align-items: center; border: 2px solid var(--ink); border-radius: 999px; padding: 4px 12px;
+    font-weight: 800; font-size: 13.5px; background: #fff; cursor: pointer; }
+  .covchip.on { background: var(--green-soft); } .covchip input { accent-color: var(--ink); }
+  .adj { font-size: 14px; font-weight: 800; margin: -6px 0 18px; }
+  .adj .chip { margin: 2px 4px 2px 0; }
 </style>
 </head>
 <body>
@@ -164,13 +175,18 @@
       <input type="file" id="file" accept=".csv,text/csv" class="hidden">
     </div>
     <div id="fileinfo" class="hidden"></div>
-    <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🛒 A/B test sample</button> · <button class="linkish" id="sample2">📅 Before/after sample</button></div>
+    <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🛒 A/B test sample</button> · <button class="linkish" id="sample2">📅 Before/after sample</button> · <button class="linkish" id="sample3">🗺️ Pilot vs holdout sample</button> · <button class="linkish" id="sample4">💳 People chose sample</button></div>
     <div id="err1" class="err"></div>
   </section>
 
   <section class="card hidden" id="s2">
     <p class="title"><span class="ic g">🎚️</span> How careful?</p>
     <div class="modes" id="modes"></div>
+  </section>
+
+  <section class="card hidden" id="s2b">
+    <p class="title"><span class="ic p">🧭</span> How did people get it?</p>
+    <div class="designs" id="designs"></div>
   </section>
 
   <section class="card hidden" id="s3">
@@ -190,13 +206,16 @@
       <button class="linkish" id="adjust">✏️ Change</button>
     </div>
     <div class="grid hidden" id="adjustgrid">
-      <div class="ab"><label class="f">Group column</label><select id="f_group"></select></div>
-      <div class="ab"><label class="f">Baseline</label><select id="f_control"></select></div>
-      <div class="ab"><label class="f">New version</label><select id="f_treat"></select></div>
-      <div class="ba"><label class="f">Date column</label><select id="f_date"></select></div>
-      <div class="ba"><label class="f">📅 Change happened on</label><input type="date" id="f_when"></div>
+      <div data-for="ab obs did"><label class="f">Group column</label><select id="f_group"></select></div>
+      <div data-for="ab obs"><label class="f">Baseline</label><select id="f_control"></select></div>
+      <div data-for="ab obs"><label class="f">New version</label><select id="f_treat"></select></div>
+      <div data-for="did"><label class="f">Got the change</label><select id="f_treated"></select></div>
+      <div data-for="did"><label class="f">Never got it</label><select id="f_comparison"></select></div>
+      <div data-for="ba did"><label class="f">Date column</label><select id="f_date"></select></div>
+      <div data-for="ba did"><label class="f">📅 Change happened on</label><input type="date" id="f_when"></div>
       <div><label class="f">Measure</label><select id="f_outcome"></select></div>
-      <div class="ba" id="agg_wrap"><label class="f">Each day uses</label><select id="f_agg"><option value="average">Its average</option><option value="total">Its total</option></select></div>
+      <div data-for="ba did" id="agg_wrap"><label class="f">Each day uses</label><select id="f_agg"><option value="average">Its average</option><option value="total">Its total</option></select></div>
+      <div data-for="obs" style="grid-column:1/-1"><label class="f">⚖️ Compare people who are alike on:</label><div class="covchips" id="covchips"></div></div>
     </div>
     <div id="err4" class="err"></div>
   </section>
@@ -214,9 +233,11 @@ const MODES = {
 };
 const STATUS = { pass: "✅", warn: "⚠️", fail: "❌", info: "💡" };
 const ASSUME = { ok: "✅", warn: "⚠️", manual: "🙋" };
-const CHECK_EMOJI = { "Weeks of data": "🗓️", "Missing days": "📆", "Steady before": "📏", "Weeks related": "🔗", "Dates": "📅", "Sample size": "👥", "Missing results": "🕳️", "Missing balance": "⚖️", "Repeat people": "🔂", "Group balance": "⚖️", "Extreme values": "🏔️", "Question fits data": "🧩" };
-const isBA = (spec) => spec && spec.analysis_type === "before_after";
-const state = { ds: null, mode: "quick", questions: [], choice: 0, spec: null, readback: "", assumed: false };
+const CHECK_EMOJI = { "Weeks of data": "🗓️", "Missing days": "📆", "Steady before": "📏", "Weeks related": "🔗", "Dates": "📅", "Sample size": "👥", "Missing results": "🕳️", "Missing balance": "⚖️", "Repeat people": "🔂", "Group balance": "⚖️", "Extreme values": "🏔️", "Question fits data": "🧩", "Groups alike": "🎲", "Groups differ": "⚖️", "Comparable people": "🤝", "Comparison group": "🧑‍🤝‍🧑" };
+const KIND = { ab_test: "ab", before_after: "ba", diff_in_diff: "did", observational: "obs" };
+const kindOf = (spec) => KIND[spec && spec.analysis_type] || "ab";
+const isDated = (spec) => ["ba", "did"].includes(kindOf(spec));
+const state = { ds: null, design: null, tapped: false, mode: "quick", questions: [], choice: 0, spec: null, readback: "", assumed: false };
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -240,6 +261,8 @@ const loadSample = (name) => async () => {
 };
 $("sample").onclick = loadSample("checkout_test.csv");
 $("sample2").onclick = loadSample("signup_page_change.csv");
+$("sample3").onclick = loadSample("regional_rollout.csv");
+$("sample4").onclick = loadSample("loyalty_program.csv");
 
 async function upload(file) {
   $("err1").textContent = "";
@@ -255,8 +278,8 @@ async function upload(file) {
     <tbody>${d.preview.map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   $("togglePrev").onclick = () => $("prev").classList.toggle("hidden");
   $("swap").onclick = () => location.reload();
-  $("s2").classList.remove("hidden"); $("s3").classList.remove("hidden");
-  renderModes(); await loadQuestions();
+  $("s2").classList.remove("hidden"); $("s2b").classList.remove("hidden"); $("s3").classList.remove("hidden");
+  renderModes(); renderDesigns(); await loadQuestions();
 }
 
 /* ---------- 2 mode ---------- */
@@ -264,18 +287,30 @@ function renderModes() {
   $("modes").innerHTML = Object.entries(MODES).map(([k, m]) => `
     <button class="mode ${state.mode === k ? "on" : ""}" data-m="${k}" aria-pressed="${state.mode === k}">
       <span class="e">${m.e}</span><b>${esc(m.title)}</b><span class="d">${esc(m.desc)}</span></button>`).join("");
-  $("modes").querySelectorAll(".mode").forEach((b) => (b.onclick = async () => { state.mode = b.dataset.m; renderModes(); await loadQuestions(); }));
+  $("modes").querySelectorAll(".mode").forEach((b) => (b.onclick = async () => { state.mode = b.dataset.m; renderModes(); renderDesigns(); await loadQuestions(); }));
+}
+
+/* ---------- 2b design ---------- */
+const curDesign = () => (state.tapped ? state.design : state.mode === "quick" ? state.ds.designs.default : null);
+const designInfo = (key) => (state.ds.designs.options.find((o) => o.key === key) || {});
+function renderDesigns() {
+  const cur = curDesign(), inferred = cur && !state.tapped;
+  $("designs").innerHTML = state.ds.designs.options.map((o) => `
+    <button class="mode ${cur === o.key ? "on" : ""}" data-d="${o.key}" ${o.ok ? "" : "disabled"} title="${esc(o.why)}" aria-pressed="${cur === o.key}">
+      <span class="e">${o.emoji}</span><b>${esc(o.title)}</b><span class="d">${esc(o.sub)}</span>${inferred && cur === o.key ? '<span class="d">👀 best guess</span>' : ""}</button>`).join("");
+  $("designs").querySelectorAll(".mode").forEach((b) => (b.onclick = async () => { state.design = b.dataset.d; state.tapped = true; renderDesigns(); state.choice = 0; await loadQuestions(); }));
 }
 
 /* ---------- 3 question ---------- */
 async function loadQuestions() {
   const keep = state.choice;
-  state.questions = (await api(`/api/suggestions?dataset_id=${state.ds.dataset_id}&mode=${state.mode}`)).questions;
+  const d = curDesign();
+  state.questions = d ? (await api(`/api/suggestions?dataset_id=${state.ds.dataset_id}&mode=${state.mode}&design=${d}`)).questions : [];
   state.choice = keep === "other" || keep >= state.questions.length ? (state.questions.length ? 0 : "other") : keep;
   renderQuestions();
 }
 function renderQuestions() {
-  const items = state.questions.map((q, i) => ({ id: i, em: q.needs_date ? "📅" : "📈", text: q.text, sub: i === 0 ? "Suggested" : "" }));
+  const items = state.questions.map((q, i) => ({ id: i, em: q.needs_date ? "📅" : designInfo(curDesign()).emoji || "📈", text: q.text, sub: i === 0 ? "Suggested" : "" }));
   items.push({ id: "other", em: "✏️", text: "Something else…", sub: "" });
   $("qlist").innerHTML = items.map((it) => `
     <label class="qopt ${state.choice === it.id ? "on" : ""}" data-id="${it.id}">
@@ -292,17 +327,18 @@ function renderQuestions() {
 $("go").onclick = async () => {
   $("err3").textContent = "";
   const q = state.choice === "other" ? $("qother").value.trim() : "";
+  if (!curDesign()) { $("err3").textContent = "🧭 Pick how people got the change first."; $("s2b").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
   if (state.choice === "other" && !q) { $("err3").textContent = "✏️ Type a question first."; return; }
   busy($("go"), true, "Thinking…");
   try {
     if (state.choice === "other") {
-      const interp = await post("/api/ask", { dataset_id: state.ds.dataset_id, question: q });
+      const interp = await post("/api/ask", { dataset_id: state.ds.dataset_id, question: q, design: curDesign() });
       state.spec = interp.spec; state.readback = interp.readback;
       await openConfirm(interp.notes);          // free text is always confirmed
     } else {
       state.spec = state.questions[state.choice].spec;
       state.readback = (await post("/api/readback", { dataset_id: state.ds.dataset_id, spec: state.spec })).readback;
-      if (state.mode === "quick" && !(isBA(state.spec) && !state.spec.change_date)) { state.assumed = true; $("s4").classList.add("hidden"); await run(); }
+      if (state.mode === "quick" && !(isDated(state.spec) && !state.spec.change_date)) { state.assumed = true; $("s4").classList.add("hidden"); await run(); }
       else { await openConfirm([]); }
     }
   } catch (e) { $("err3").textContent = "😕 " + e.message; }
@@ -320,49 +356,75 @@ async function openConfirm(notes = []) {
   $("readback").textContent = state.readback;
   $("notes").innerHTML = notes.map((n) => `<div class="note">💡 ${esc(n)}</div>`).join("");
   const s = state.spec, cols = state.ds.columns.map((c) => c.name), numeric = state.ds.columns.filter((c) => c.type === "number").map((c) => c.name);
-  const ba = isBA(s);
-  document.querySelectorAll("#adjustgrid .ab").forEach((el) => el.classList.toggle("hidden", ba));
-  document.querySelectorAll("#adjustgrid .ba").forEach((el) => el.classList.toggle("hidden", !ba));
+  const k = kindOf(s);
+  document.querySelectorAll("#adjustgrid [data-for]").forEach((el) => el.classList.toggle("hidden", !el.dataset.for.split(" ").includes(k)));
   fillSelect($("f_outcome"), numeric, s.outcome_col);
-  if (ba) {
+  if (isDated(s)) {
     const dates = state.ds.columns.filter((c) => c.type === "date");
     fillSelect($("f_date"), dates.map((c) => c.name), s.date_col);
     $("f_agg").value = s.aggregate || "average";
     setDateBounds();
     $("f_when").value = s.change_date || "";
     $("f_when").classList.toggle("need", !s.change_date);
-    $("adjustgrid").classList.remove("hidden");              // the date is required, so show it
-  } else {
+  }
+  if (k !== "ba") {
     fillSelect($("f_group"), cols, s.group_col);
     const lv = await levelsFor(s.group_col);
-    fillSelect($("f_control"), lv, s.control); fillSelect($("f_treat"), lv, s.treatment);
+    if (k === "did") { fillSelect($("f_treated"), lv, s.treated); fillSelect($("f_comparison"), lv, s.comparison); }
+    else { fillSelect($("f_control"), lv, s.control); fillSelect($("f_treat"), lv, s.treatment); }
   }
+  if (k === "obs") await loadCovs(s.covariates);
+  $("adjustgrid").classList.toggle("hidden", !(isDated(s) || k === "obs") && $("adjustgrid").classList.contains("hidden"));
+  if (isDated(s) || k === "obs") $("adjustgrid").classList.remove("hidden");   // date / comparison choices matter, so show them
   $("s4").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+async function loadCovs(checked) {
+  const q = new URLSearchParams({ dataset_id: state.ds.dataset_id, group_col: $("f_group").value, control: $("f_control").value, treatment: $("f_treat").value, outcome_col: $("f_outcome").value });
+  let cands = [];
+  try { cands = (await api("/api/covariates?" + q)).columns; } catch (e) {}
+  $("covchips").innerHTML = cands.length ? cands.map((c) => {
+    const on = checked ? checked.includes(c.name) : c.checked;
+    return `<label class="covchip ${on ? "on" : ""}" title="${esc(c.note || "")}"><input type="checkbox" value="${esc(c.name)}" ${on ? "checked" : ""}>${esc(c.name)}</label>`;
+  }).join("") : '<span class="muted">No other columns to compare on.</span>';
+  $("covchips").querySelectorAll("input").forEach((i) => (i.onchange = () => { i.parentElement.classList.toggle("on", i.checked); specChanged(false); }));
 }
 function setDateBounds() {
   const c = state.ds.columns.find((x) => x.name === $("f_date").value) || {};
   $("f_when").min = c.date_min || ""; $("f_when").max = c.date_max || "";
-  $("agg_wrap").classList.toggle("hidden", !(c.rows_per_day > 1.05));
+  $("agg_wrap").classList.toggle("off", !(c.rows_per_day > 1.05));
+  $("agg_wrap").style.display = c.rows_per_day > 1.05 && isDated(state.spec) ? "" : "none";
 }
 $("adjust").onclick = () => $("adjustgrid").classList.toggle("hidden");
 async function specChanged(groupChanged) {
-  if (isBA(state.spec)) {
+  const k = kindOf(state.spec), outcome = $("f_outcome").value;
+  if (k === "ba" || k === "did") {
     if (groupChanged) setDateBounds();
-    state.spec = { analysis_type: "before_after", date_col: $("f_date").value, change_date: $("f_when").value,
-                   outcome_col: $("f_outcome").value, aggregate: $("agg_wrap").classList.contains("hidden") ? "average" : $("f_agg").value };
-    $("f_when").classList.toggle("need", !state.spec.change_date);
+    const agg = $("agg_wrap").style.display === "none" ? "average" : $("f_agg").value;
+    const base = { date_col: $("f_date").value, change_date: $("f_when").value, outcome_col: outcome, aggregate: agg };
+    $("f_when").classList.toggle("need", !base.change_date);
+    if (k === "ba") state.spec = { analysis_type: "before_after", ...base };
+    else {
+      if (groupChanged === "group") { const lv = await levelsFor($("f_group").value); fillSelect($("f_comparison"), lv, lv[0]); fillSelect($("f_treated"), lv, lv[1] || lv[0]); }
+      state.spec = { analysis_type: "diff_in_diff", ...base, group_col: $("f_group").value, treated: $("f_treated").value, comparison: $("f_comparison").value };
+    }
   } else {
-    if (groupChanged) { const lv = await levelsFor($("f_group").value); fillSelect($("f_control"), lv, lv[0]); fillSelect($("f_treat"), lv, lv[1] || lv[0]); }
-    state.spec = { analysis_type: "ab_test", group_col: $("f_group").value, control: $("f_control").value, treatment: $("f_treat").value, outcome_col: $("f_outcome").value };
+    if (groupChanged === "group") { const lv = await levelsFor($("f_group").value); fillSelect($("f_control"), lv, lv[0]); fillSelect($("f_treat"), lv, lv[1] || lv[0]); }
+    state.spec = { analysis_type: state.spec.analysis_type, group_col: $("f_group").value, control: $("f_control").value, treatment: $("f_treat").value, outcome_col: outcome };
+    if (k === "obs") {
+      state.spec.assignment = state.spec.assignment || "chose";
+      if (groupChanged) await loadCovs(null);
+      state.spec.covariates = [...$("covchips").querySelectorAll("input:checked")].map((i) => i.value);
+    }
   }
   try { state.readback = (await post("/api/readback", { dataset_id: state.ds.dataset_id, spec: state.spec })).readback; $("readback").textContent = state.readback; } catch (e) {}
 }
-$("f_group").onchange = () => specChanged(true);
+$("f_group").onchange = () => specChanged("group");
 $("f_date").onchange = () => specChanged(true);
-["f_control", "f_treat", "f_outcome", "f_when", "f_agg"].forEach((id) => ($(id).onchange = () => specChanged(false)));
+$("f_outcome").onchange = () => specChanged(kindOf(state.spec) === "obs" ? true : false);
+["f_control", "f_treat", "f_treated", "f_comparison", "f_when", "f_agg"].forEach((id) => ($(id).onchange = () => specChanged(id === "f_control" || id === "f_treat" ? (kindOf(state.spec) === "obs" ? true : false) : false)));
 $("runbtn").onclick = async () => {
   $("err4").textContent = "";
-  if (isBA(state.spec) && !state.spec.change_date) { $("err4").textContent = "📅 Pick the date the change happened first."; $("f_when").focus(); return; }
+  if (isDated(state.spec) && !state.spec.change_date) { $("err4").textContent = "📅 Pick the date the change happened first."; $("f_when").focus(); return; }
   busy($("runbtn"), true, "Crunching…"); try { await run(); } catch (e) { $("err4").textContent = "😕 " + e.message; } busy($("runbtn"), false);
 };
 
@@ -424,6 +486,29 @@ function seriesChart(sr, m, fmt) {
   return g + "</svg>";
 }
 
+function didChart(sr, m, fmt) {
+  const W = 760, H = 290, padL = 54, padR = 18, padT = 26, padB = 34, n = sr.dates.length, cols = ["var(--purple)", "var(--orange)"];
+  const sm = sr.groups.map((g) => g.smooth.map((v) => (v == null ? null : v * m))), raw = sr.groups.map((g) => g.values.map((v) => (v == null ? null : v * m)));
+  const all = raw.flat().concat(sm.flat()).filter((v) => v != null);
+  let lo = Math.min(...all), hi = Math.max(...all); const pad = (hi - lo) * 0.1 || 1; lo -= pad; hi += pad;
+  const x = (i) => padL + (i / Math.max(n - 1, 1)) * (W - padL - padR), y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+  const ci = sr.dates.indexOf(sr.change_date);
+  let g = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Each group's daily value over time with the change date marked">`;
+  ticks(lo, hi, 4).forEach((t) => { g += `<line x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="2"/><text x="${padL - 8}" y="${y(t) + 4}" text-anchor="end">${fmt(t)}</text>`; });
+  const xt = 5; for (let k = 0; k <= xt; k++) { const i = Math.round((k / xt) * (n - 1)); g += `<text x="${x(i)}" y="${H - 10}" text-anchor="${k === 0 ? "start" : k === xt ? "end" : "middle"}">${dayLabel(sr.dates[i])}</text>`; }
+  raw.forEach((vals, gi) => vals.forEach((v, i) => { if (v != null) g += `<circle cx="${x(i)}" cy="${y(v)}" r="2.2" fill="${cols[gi]}" opacity=".2"/>`; }));
+  sm.forEach((vals, gi) => {
+    let d = "", pen = false;
+    vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += `${pen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`; pen = true; });
+    g += `<path d="${d}" fill="none" stroke="${cols[gi]}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const last = [...vals].reverse().find((v) => v != null);
+    if (last != null) g += `<text class="lbl" x="${W - padR}" y="${y(last) - 8}" text-anchor="end" fill="${cols[gi]}">${esc(sr.groups[gi].name)}</text>`;
+  });
+  g += `<line x1="${x(ci)}" x2="${x(ci)}" y1="${padT - 4}" y2="${H - padB}" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="5 4"/>
+        <text class="lbl" x="${x(ci)}" y="${padT - 10}" text-anchor="middle">📅 ${dayLabel(sr.change_date)}</text>`;
+  return g + "</svg>";
+}
+
 /* ---------- tabs ---------- */
 function bindTabs(root) {
   root.querySelectorAll(".tabbar").forEach((bar) => {
@@ -449,7 +534,9 @@ function renderReport(r) {
   let h = `<div class="reportbar"><div class="seg" role="group" aria-label="Rerun in another mode">${Object.entries(MODES).map(([k, mo]) =>
       `<button data-rm="${k}" class="${r.mode === k ? "on" : ""}">${mo.e} ${esc(mo.short)}</button>`).join("")}</div></div>`;
 
-  if (state.assumed) h += `<div class="assumed">👀 Assumed: ${esc(state.readback)} <button class="linkish" id="change">✏️ Change</button></div>`;
+  const di = designInfo(r.design);
+  if (r.design && di.title) h += `<div style="margin-bottom:14px"><span class="chip">🧭 ${di.emoji} ${esc(di.title)}</span></div>`;
+  if (state.assumed) h += `<div class="assumed">👀 Assumed: ${state.tapped ? "" : esc((di.emoji || "") + " " + (di.title || "") + " · ")}${esc(state.readback)} <button class="linkish" id="change">✏️ Change</button></div>`;
 
   if (r.mode === "right_answer" && ok) {
     h += r.review_items.length
@@ -459,14 +546,19 @@ function renderReport(r) {
 
   h += `<div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h2>${esc(r.headline)}</h2><p>${esc(r.answer)}</p>${r.how_sure ? `<p class="sure">${esc(r.how_sure)}</p>` : ""}</div></div>`;
 
+  if (r.adjusted_for && r.adjusted_for.length) h += `<div class="adj">⚖️ Compared people alike on: ${r.adjusted_for.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>`;
+
   if (ok) {
+    const did = r.analysis === "diff_in_diff", armFmt = did ? fd : f1;
     const arms = r.arms.map((a, i) => ({ label: a.name, est: a.estimate * m, lo: a.ci_low * m, hi: a.ci_high * m, color: i ? "var(--purple)" : "var(--orange)" }));
     const e = r.effect;
     const diff = [{ label: "Difference", est: e.diff * m, lo: e.ci_low * m, hi: e.ci_high * m, color: r.verdict === "clear_difference" ? "var(--green)" : "var(--blue)" }];
-    if (r.series) h += `<div class="card"><p class="title"><span class="ic o">📈</span> Over time</p>${seriesChart(r.series, m, f1)}
+    if (r.series && r.series.groups) h += `<div class="card"><p class="title"><span class="ic o">📈</span> Over time</p>${didChart(r.series, m, f1)}
+      <div class="cap">Each line = one group's smoothed daily value. Dashed = the change date. If the lines were running side by side before it, the gap is a fair yardstick.</div></div>`;
+    else if (r.series) h += `<div class="card"><p class="title"><span class="ic o">📈</span> Over time</p>${seriesChart(r.series, m, f1)}
       <div class="cap">Dots = each day. Lines = smoothed. Dotted = typical day, before and after (whole weeks only).</div></div>`;
     h += `<div class="card"><p class="title"><span class="ic p">📊</span> The picture</p><div class="charts">
-      <div><p class="ct">${esc(r.outcome_label[0].toUpperCase() + r.outcome_label.slice(1))}</p>${intervalChart(arms, { fmt: f1, aria: "Result per group with likely range", floor0: pts })}<div class="cap">Dot = what we saw. Line = likely range.</div></div>
+      <div><p class="ct">${esc(r.outcome_label[0].toUpperCase() + r.outcome_label.slice(1))}</p>${intervalChart(arms, { fmt: armFmt, aria: "Result per group with likely range", floor0: pts && !did })}<div class="cap">Dot = what we saw. Line = likely range.</div></div>
       <div><p class="ct">The difference</p>${intervalChart(diff, { fmt: fd, zero: true, aria: "Difference with likely range" })}<div class="cap">Line touches the dashed 0 = could be no change.</div></div>
     </div></div>`;
   }
@@ -478,7 +570,7 @@ function renderReport(r) {
 
   if (r.mode === "research" && ok) {
     h += `<div class="card"><p class="title"><span class="ic b">🔍</span> Who's different?</p><p class="muted" style="margin:0 0 10px;font-weight:700">${esc(r.segment_note)}</p>
-      ${r.segments.length ? `<div class="scroll"><table><thead><tr><th>Slice</th><th>${r.analysis === "before_after" ? "Weeks" : "Rows"}</th><th>Difference</th><th>If nothing changed*</th></tr></thead><tbody>
+      ${r.segments.length ? `<div class="scroll"><table><thead><tr><th>Slice</th><th>${["before_after", "diff_in_diff"].includes(r.analysis) ? "Weeks" : "Rows"}</th><th>Difference</th><th>If nothing changed*</th></tr></thead><tbody>
       ${r.segments.map((s) => `<tr class="${s.flagged ? "flag" : ""}"><td>${s.flagged ? "⭐ " : ""}<b>${esc(s.column)}</b> = ${esc(s.level)}</td><td>${s.n_control.toLocaleString()} / ${s.n_treatment.toLocaleString()}</td>
         <td class="v">${fd(s.diff * m)} <span class="muted" style="font-weight:600">(${fd(s.ci_low * m)} to ${fd(s.ci_high * m)})</span></td><td>${s.p_adj < 0.001 ? "&lt; 0.1%" : (s.p_adj * 100).toFixed(0) + "%"}</td></tr>`).join("")}</tbody></table></div>
       <div class="cap">*How often a gap this big would appear, adjusted for checking many slices.</div>` : ""}</div>`;

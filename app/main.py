@@ -5,6 +5,7 @@ import hashlib
 import io
 import uuid
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -14,7 +15,9 @@ from pydantic import BaseModel
 
 from .analysis import analyze
 from .schemas import AnySpec, Mode
-from .translator import interpret, profile_columns, readback, suggest_questions
+from .observational import covariate_candidates
+from .schemas import ObservationalSpec
+from .translator import design_options, interpret, profile_columns, readback, suggest_questions
 
 app = FastAPI(title="Data Science Dashboarder")
 STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -27,6 +30,7 @@ DATASETS: dict[str, dict] = {}
 class AskBody(BaseModel):
     dataset_id: str
     question: str
+    design: Optional[str] = None
 
 
 class RunBody(BaseModel):
@@ -61,6 +65,7 @@ async def upload(file: UploadFile = File(...)):
         "name": DATASETS[dataset_id]["name"],
         "rows": int(df.shape[0]),
         "columns": profile_columns(df),
+        "designs": design_options(df),
         "preview": df.head(5).astype(object).where(df.head(5).notna(), None).to_dict("records"),
     }
 
@@ -68,7 +73,13 @@ async def upload(file: UploadFile = File(...)):
 @app.post("/api/ask")
 def ask(body: AskBody):
     ds = _get(body.dataset_id)
-    result = interpret(body.question, ds["df"])
+    if body.design:
+        opt = {o["key"]: o for o in design_options(ds["df"])["options"]}.get(body.design)
+        if not opt:
+            raise HTTPException(400, "Unknown choice.")
+        if not opt["ok"]:
+            raise HTTPException(400, opt["why"])
+    result = interpret(body.question, ds["df"], body.design)
     return result.model_dump()
 
 
@@ -87,9 +98,20 @@ def run(body: RunBody):
 
 
 @app.get("/api/suggestions")
-def suggestions(dataset_id: str, mode: Mode = "quick"):
+def suggestions(dataset_id: str, mode: Mode = "quick", design: Optional[str] = None):
     ds = _get(dataset_id)
-    return {"questions": suggest_questions(ds["df"], mode)}
+    return {"questions": suggest_questions(ds["df"], mode, design=design)}
+
+
+@app.get("/api/covariates")
+def covariates(dataset_id: str, group_col: str, control: str, treatment: str, outcome_col: str):
+    """Columns people can be compared on, and which ones are ticked by default."""
+    ds = _get(dataset_id)
+    spec = ObservationalSpec(group_col=group_col, control=control, treatment=treatment, outcome_col=outcome_col)
+    for col in (group_col, outcome_col):
+        if col not in ds["df"].columns:
+            raise HTTPException(400, "Unknown column.")
+    return {"columns": covariate_candidates(ds["df"], spec)}
 
 
 @app.get("/api/levels")

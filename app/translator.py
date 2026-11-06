@@ -16,13 +16,16 @@ import pandas as pd
 from .analysis import validate_spec
 from .before_after import daily_series, parse_dates
 from .checks import detect_outcome_kind, is_idlike
+from .observational import POST_HINTS, default_covariates
 from .interpret import humanize
-from .schemas import ABTestSpec, BeforeAfterSpec, Interpretation
+from .design import DESIGNS
+from .schemas import ABTestSpec, BeforeAfterSpec, DiDSpec, Interpretation, ObservationalSpec
 
 MODEL = os.environ.get("DASHBOARDER_MODEL", "claude-sonnet-5-5")
 
-GROUP_HINTS = re.compile(r"variant|group|arm|treat|test|experiment|cohort|bucket|cell|version", re.I)
-OUTCOME_HINTS = re.compile(r"convert|purchas|revenue|sales|click|signup|retain|churn|order|spend|amount|outcome|success", re.I)
+GROUP_HINTS = re.compile(r"variant|group|arm|treat|test|experiment|cohort|bucket|cell|version|member|join|enrol|opt|subscri|adopt|loyal|expos", re.I)
+SELF_HINTS = re.compile(r"member|join|enrol|opt|subscri|adopt|loyal|signed|expos|self", re.I)
+OUTCOME_HINTS = re.compile(r"convert|purchas|revenue|sales|click|signup|sign_up|signed|renew|retain|churn|order|spend|amount|outcome|success", re.I)
 CONTROL_HINTS = re.compile(r"control|baseline|base|holdout|old|current|existing|^a$", re.I)
 DATE_HINTS = re.compile(r"date|day|time|week|month|period|^dt$|_at$", re.I)
 TIME_WORDS = re.compile(r"\b(after|before|since|launch\w*|releas\w*|rolled out|roll-out|rollout|went live|go live|"
@@ -75,8 +78,10 @@ def profile_columns(df: pd.DataFrame) -> list[dict]:
 
 def readback(df: pd.DataFrame, spec) -> str:
     """Plain-English restatement, written by code from the spec (never by the LLM)."""
-    if spec.analysis_type == "before_after":
+    if spec.analysis_type in ("before_after", "diff_in_diff"):
         return _readback_ba(df, spec)
+    if spec.analysis_type == "observational":
+        return _readback_obs(df, spec)
     g = df[spec.group_col].astype(str)
     n_c, n_t = int((g == spec.control).sum()), int((g == spec.treatment).sum())
     kind = detect_outcome_kind(df[spec.outcome_col])
@@ -85,7 +90,15 @@ def readback(df: pd.DataFrame, spec) -> str:
             f"Measured by {measure} · {n_t:,} vs {n_c:,} rows.")
 
 
-def _readback_ba(df: pd.DataFrame, spec: BeforeAfterSpec) -> str:
+def _measure(df: pd.DataFrame, spec) -> str:
+    if getattr(spec, "aggregate", "average") == "total":
+        return f"daily total of '{spec.outcome_col}'"
+    if detect_outcome_kind(df[spec.outcome_col]) == "binary":
+        return f"yes/no rate of '{spec.outcome_col}'"
+    return f"average '{spec.outcome_col}'"
+
+
+def _readback_ba(df: pd.DataFrame, spec) -> str:
     if spec.date_col not in df.columns or spec.outcome_col not in df.columns:
         return "Pick the date column and the result to measure."
     if not spec.change_date:
@@ -93,19 +106,25 @@ def _readback_ba(df: pd.DataFrame, spec: BeforeAfterSpec) -> str:
     d = parse_dates(df[spec.date_col]).dropna()
     ts = pd.Timestamp(spec.change_date)
     n_b, n_a = int(d[d < ts].nunique()), int(d[d >= ts].nunique())
-    if spec.aggregate == "total":
-        measure = f"daily total of '{spec.outcome_col}'"
-    elif detect_outcome_kind(df[spec.outcome_col]) == "binary":
-        measure = f"yes/no rate of '{spec.outcome_col}'"
-    else:
-        measure = f"average '{spec.outcome_col}'"
-    return (f"Did the {measure} change after {ts.strftime('%b')} {ts.day}, {ts.year}? "
-            f"{n_b:,} days before vs {n_a:,} after.")
+    when = f"{ts.strftime('%b')} {ts.day}, {ts.year}"
+    if spec.analysis_type == "diff_in_diff":
+        return (f"Did the {_measure(df, spec)} change more for '{spec.treated}' than for '{spec.comparison}' "
+                f"after {when}? {n_b:,} days before vs {n_a:,} after.")
+    return f"Did the {_measure(df, spec)} change after {when}? {n_b:,} days before vs {n_a:,} after."
+
+
+def _readback_obs(df: pd.DataFrame, spec: ObservationalSpec) -> str:
+    g = df[spec.group_col].astype(str)
+    n_c, n_t = int((g == spec.control).sum()), int((g == spec.treatment).sum())
+    cols = ", ".join(spec.covariates[:4]) + (f" +{len(spec.covariates) - 4} more" if len(spec.covariates) > 4 else "")
+    like = f", comparing people alike on {cols}" if spec.covariates else ""
+    return (f"Is '{spec.treatment}' linked to a different {_measure(df, spec)} than '{spec.control}'{like}? "
+            f"{n_t:,} vs {n_c:,} rows.")
 
 
 # ----------------------------------------------------------------------------- LLM
 
-def _llm_spec(question: str, profile: list[dict]) -> dict | None:
+def _llm_spec(question: str, profile: list[dict], design: str | None = None) -> dict | None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return None
     try:
@@ -119,35 +138,45 @@ def _llm_spec(question: str, profile: list[dict]) -> dict | None:
                 "type": "object",
                 "properties": {
                     "analysis_type": {
-                        "type": "string", "enum": ["ab_test", "before_after"],
-                        "description": "ab_test = compare two groups shown different versions at the same time. "
-                                       "before_after = did a number change after a date."},
+                        "type": "string", "enum": ["ab_test", "before_after", "diff_in_diff", "observational"],
+                        "description": "ab_test = two groups, people split at random. before_after = did a number change "
+                                       "after a date, for everyone. diff_in_diff = a date, and one group never got the "
+                                       "change. observational = two groups people chose themselves."},
                     "outcome_col": {"type": "string"},
-                    "group_col": {"type": "string", "description": "ab_test only"},
-                    "control": {"type": "string", "description": "ab_test only: baseline value in group_col"},
-                    "treatment": {"type": "string", "description": "ab_test only: new-version value in group_col"},
-                    "date_col": {"type": "string", "description": "before_after only: a column of type date"},
+                    "group_col": {"type": "string", "description": "ab_test, observational, diff_in_diff"},
+                    "control": {"type": "string", "description": "ab_test/observational: baseline value in group_col"},
+                    "treatment": {"type": "string", "description": "ab_test/observational: new-version value in group_col"},
+                    "treated": {"type": "string", "description": "diff_in_diff: group that got the change"},
+                    "comparison": {"type": "string", "description": "diff_in_diff: group that never got it"},
+                    "date_col": {"type": "string", "description": "before_after, diff_in_diff: a column of type date"},
                     "change_date": {"type": "string",
-                                    "description": "before_after only: YYYY-MM-DD, ONLY if the question states the date; "
-                                                   "otherwise an empty string. Never guess a date."},
+                                    "description": "before_after, diff_in_diff: YYYY-MM-DD, ONLY if the question states "
+                                                   "the date; otherwise an empty string. Never guess a date."},
                     "aggregate": {"type": "string", "enum": ["average", "total"],
-                                  "description": "before_after only: with several rows per day, use each day's "
+                                  "description": "before_after, diff_in_diff: with several rows per day, use each day's "
                                                  "average (default) or total."},
                 },
                 "required": ["analysis_type", "outcome_col"],
             },
         }
+        fixed = ""
+        if design:
+            fixed = (f"The person already said how people got the change: \"{DESIGNS[design]['label']}\". "
+                     f"Use analysis_type = {DESIGNS[design]['analysis']}.\n\n")
         msg = client.messages.create(
             model=MODEL, max_tokens=500, tools=[tool],
             tool_choice={"type": "tool", "name": "fill_order_form"},
             messages=[{"role": "user", "content": (
                 "A business user asked a question about their data. Translate it into the analysis form. "
-                "Use ONLY the column names and values listed. Do not compute anything.\n\n"
+                "Use ONLY the column names and values listed. Do not compute anything.\n\n" + fixed +
                 f"Question: {question}\n\nColumns:\n{json.dumps(profile, indent=1)}")}],
         )
         for block in msg.content:
             if block.type == "tool_use":
-                return dict(block.input)
+                raw = dict(block.input)
+                if design:
+                    raw["analysis_type"] = DESIGNS[design]["analysis"]
+                return raw
     except Exception as e:  # network, auth, etc. Fall back quietly but tell the user.
         return {"_error": f"{type(e).__name__}"}
     return None
@@ -171,30 +200,39 @@ def _group_choice(df: pd.DataFrame) -> str | None:
     cands = [c for c in cols if 2 <= df[c].nunique() <= 6 and not idlike(c)
              and not pd.api.types.is_float_dtype(df[c]) and not is_date_col(df[c])]
     hinted = [c for c in cands if GROUP_HINTS.search(c)]
-    pick = (hinted or [c for c in cands if not pd.api.types.is_numeric_dtype(df[c])] or cands or [None])[0]
-    return pick
+    return (hinted or [c for c in cands if not pd.api.types.is_numeric_dtype(df[c])] or cands or [None])[0]
 
 
-def _ab_heuristic(question: str, df: pd.DataFrame) -> dict:
+def _levels_pair(df: pd.DataFrame, group: str, question: str = "") -> tuple[str, str]:
+    """(baseline, other) values of a group column; the baseline looks like control/baseline/no."""
+    q = question.lower()
+    levels = [str(v) for v in df[group].dropna().unique()]
+    base = next((l for l in levels if CONTROL_HINTS.search(l)), None) or \
+        next((l for l in sorted(levels) if l.lower() in ("no", "false", "0", "none")), None) or sorted(levels)[0]
+    mentioned = [l for l in levels if l.lower() in q and l != base]
+    other = (mentioned or [l for l in sorted(levels) if l != base] or levels)[0]
+    return base, other
+
+
+def _outcome_choice(df: pd.DataFrame, question: str, exclude: tuple = ()) -> str:
     q = question.lower()
     n = len(df)
-    cols = list(df.columns)
-
-    def idlike(c):
-        return c.lower().endswith("id") or df[c].nunique() == n
-
-    group = _group_choice(df) or cols[0]
-    levels = [str(v) for v in df[group].dropna().unique()]
-    control = next((l for l in levels if CONTROL_HINTS.search(l)), sorted(levels)[0])
-    mentioned = [l for l in levels if l.lower() in q and l != control]
-    treatment = (mentioned or [l for l in levels if l != control] or levels)[0]
-
-    numeric = [c for c in cols if pd.api.types.is_numeric_dtype(df[c]) and c != group and not idlike(c)]
+    numeric = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and c not in exclude
+               and not (c.lower().endswith("id") or df[c].nunique() == n)]
     named = [c for c in numeric if c.lower() in q or humanize(c).lower() in q]
-    hinted_o = [c for c in numeric if OUTCOME_HINTS.search(c)]
-    outcome = (named or hinted_o or numeric or [cols[-1]])[0]
-    return {"analysis_type": "ab_test", "group_col": group, "control": control, "treatment": treatment,
-            "outcome_col": outcome}
+    hinted = [c for c in numeric if OUTCOME_HINTS.search(c)]
+    return (named or hinted or numeric or [df.columns[-1]])[0]
+
+
+def _ab_heuristic(question: str, df: pd.DataFrame, analysis: str = "ab_test", assignment: str = "chose") -> dict:
+    group = _group_choice(df) or df.columns[0]
+    control, treatment = _levels_pair(df, group, question)
+    outcome = _outcome_choice(df, question, (group,))
+    out = {"analysis_type": analysis, "group_col": group, "control": control, "treatment": treatment,
+           "outcome_col": outcome}
+    if analysis == "observational":
+        out["assignment"] = assignment
+    return out
 
 
 def _heuristic_spec(question: str, df: pd.DataFrame) -> dict:
@@ -222,20 +260,27 @@ def find_date_in_text(question: str, df_dates: pd.Series) -> str:
     return ""
 
 
-def _ba_heuristic(question: str, df: pd.DataFrame, date_col: str) -> dict:
-    q = question.lower()
-    cols = list(df.columns)
-    n = len(df)
-
-    def idlike(c):
-        return c.lower().endswith("id") or df[c].nunique() == n
-    numeric = [c for c in cols if pd.api.types.is_numeric_dtype(df[c]) and not idlike(c)]
-    named = [c for c in numeric if c.lower() in q or humanize(c).lower() in q]
-    hinted_o = [c for c in numeric if OUTCOME_HINTS.search(c)]
-    outcome = (named or hinted_o or numeric or [cols[-1]])[0]
+def _ba_heuristic(question: str, df: pd.DataFrame, date_col: str, with_group: bool = False) -> dict:
+    group = _group_choice(df) if with_group else None
+    outcome = _outcome_choice(df, question, tuple(c for c in (date_col, group) if c))
     dates = parse_dates(df[date_col]).dropna()
-    return {"analysis_type": "before_after", "date_col": date_col, "outcome_col": outcome,
-            "change_date": find_date_in_text(question, dates) if len(dates) else "", "aggregate": "average"}
+    out = {"analysis_type": "before_after", "date_col": date_col, "outcome_col": outcome,
+           "change_date": find_date_in_text(question, dates) if len(dates) else "", "aggregate": "average"}
+    if with_group and group:
+        comparison, treated = _levels_pair(df, group, question)
+        out.update(analysis_type="diff_in_diff", group_col=group, treated=treated, comparison=comparison)
+    return out
+
+
+def _heuristic_for_design(question: str, df: pd.DataFrame, design: str) -> dict:
+    if design == "random":
+        return _ab_heuristic(question, df)
+    if design in ("chose", "unsure"):
+        return _ab_heuristic(question, df, "observational", design)
+    dcols = date_columns(df)
+    if design == "one_date":
+        return _ba_heuristic(question, df, dcols[0])
+    return _ba_heuristic(question, df, dcols[0], with_group=True)
 
 
 def _pick_heuristic(question: str, df: pd.DataFrame) -> dict:
@@ -245,39 +290,68 @@ def _pick_heuristic(question: str, df: pd.DataFrame) -> dict:
     if dcols:
         dates = parse_dates(df[dcols[0]]).dropna()
         typed_date = bool(len(dates)) and bool(find_date_in_text(question, dates))
-        wants_time = bool(TIME_WORDS.search(question)) or typed_date
-        if wants_time or not ab_ok:
+        if bool(TIME_WORDS.search(question)) or typed_date or not ab_ok:
             return _ba_heuristic(question, df, dcols[0])
     return _ab_heuristic(question, df)
 
 
+# ------------------------------------------------------------------ how people got it
+
+def design_options(df: pd.DataFrame) -> dict:
+    """Which 'how did people get it?' answers the file can support, and the likeliest one."""
+    group, dcols = _group_choice(df), date_columns(df)
+    need_group, need_date = "Needs a column that splits people into groups.", "Needs a date column."
+    ok = {"random": bool(group), "chose": bool(group), "unsure": bool(group), "one_date": bool(dcols),
+          "one_date_comparison": bool(group and dcols)}
+    why = {"random": need_group, "chose": need_group, "unsure": need_group, "one_date": need_date,
+           "one_date_comparison": need_group if not group else need_date}
+    default = None
+    if group and dcols:
+        default = "random" if _has_ab_structure(df, group) and not SELF_HINTS.search(group) else "one_date"
+    elif dcols:
+        default = "one_date"
+    elif group:
+        default = "chose" if SELF_HINTS.search(group) or not _has_ab_structure(df, group) else "random"
+    return {"options": [{"key": k, **{f: v for f, v in DESIGNS[k].items() if f in ("emoji", "title", "sub")},
+                         "ok": ok[k], "why": "" if ok[k] else why[k]} for k in DESIGNS],
+            "default": default}
+
+
 # ---------------------------------------------------------------------------- public
 
-def _build_spec(raw: dict):
+def _build_spec(raw: dict, df: pd.DataFrame, design: str | None = None):
     t = raw.get("analysis_type", "ab_test")
     if t == "before_after":
         return BeforeAfterSpec(date_col=raw["date_col"], outcome_col=raw["outcome_col"],
-                               change_date=raw.get("change_date", "") or "",
-                               aggregate=raw.get("aggregate") or "average")
+                               change_date=raw.get("change_date", "") or "", aggregate=raw.get("aggregate") or "average")
+    if t == "diff_in_diff":
+        return DiDSpec(date_col=raw["date_col"], outcome_col=raw["outcome_col"], group_col=raw["group_col"],
+                       treated=raw["treated"], comparison=raw["comparison"],
+                       change_date=raw.get("change_date", "") or "", aggregate=raw.get("aggregate") or "average")
+    if t == "observational":
+        base = ObservationalSpec(group_col=raw["group_col"], control=raw["control"], treatment=raw["treatment"],
+                                 outcome_col=raw["outcome_col"],
+                                 assignment=design if design in ("chose", "unsure") else raw.get("assignment", "chose"))
+        return base.model_copy(update={"covariates": default_covariates(df, base)})
     return ABTestSpec(group_col=raw["group_col"], control=raw["control"], treatment=raw["treatment"],
                       outcome_col=raw["outcome_col"])
 
 
-def interpret(question: str, df: pd.DataFrame) -> Interpretation:
+def interpret(question: str, df: pd.DataFrame, design: str | None = None) -> Interpretation:
     notes: list[str] = []
     source = "heuristic"
-    raw = _llm_spec(question, profile_columns(df))
+    raw = _llm_spec(question, profile_columns(df), design)
     spec = None
     if raw and "_error" not in raw:
         try:
-            cand = _build_spec(raw)
+            cand = _build_spec(raw, df, design)
             problems = validate_spec(df, cand)
-            if cand.analysis_type == "before_after" and cand.change_date and problems and \
-                    "outside your data" in problems[0]:
+            dated = cand.analysis_type in ("before_after", "diff_in_diff")
+            if dated and cand.change_date and problems and "outside your data" in problems[0]:
                 notes.append(f"The date {cand.change_date} isn't in your data, so please pick it.")
                 cand = cand.model_copy(update={"change_date": ""})
                 problems = validate_spec(df, cand)
-            if cand.analysis_type == "before_after" and not cand.change_date:
+            if dated and not cand.change_date:
                 problems = [p for p in problems if p != "Pick the date the change happened."]
             if problems:
                 notes.append("The AI misread your data, so columns were guessed: " + " ".join(problems))
@@ -288,63 +362,98 @@ def interpret(question: str, df: pd.DataFrame) -> Interpretation:
     elif raw and "_error" in raw:
         notes.append(f"AI unreachable ({raw['_error']}), so columns were guessed.")
     if spec is None:
-        spec = _build_spec(_pick_heuristic(question, df))
+        guess = _heuristic_for_design(question, df, design) if design else _pick_heuristic(question, df)
+        spec = _build_spec(guess, df, design)
         if not os.environ.get("ANTHROPIC_API_KEY"):
             notes.append("No AI key: columns were guessed from names. Please check.")
-    if spec.analysis_type == "before_after" and not spec.change_date:
+    if spec.analysis_type in ("before_after", "diff_in_diff") and not spec.change_date:
         notes.append("Pick the date the change happened.")
     return Interpretation(spec=spec, readback=readback(df, spec), source=source, notes=notes)
 
 
 # ------------------------------------------------------------- prepared questions
 
-def _ab_suggestions(df: pd.DataFrame, mode: str, limit: int) -> list[dict]:
+def _what(df: pd.DataFrame, o: str) -> str:
+    return f"{humanize(o)} rate" if detect_outcome_kind(df[o]) == "binary" else f"average {humanize(o)}"
+
+
+def _outcomes(df: pd.DataFrame, exclude: tuple, first: str | None, limit: int, after_choice: bool = False) -> list[str]:
+    cols = [c for c in df.columns if c not in exclude and pd.api.types.is_numeric_dtype(df[c]) and not is_idlike(df, c)]
+    if after_choice:   # for "they chose": results that happen after the choice come first; past_* columns are background
+        cols = [c for c in cols if POST_HINTS.search(c)] + [c for c in cols if not POST_HINTS.search(c) and not re.search("past|prior|before|previous|age", c, re.I)]
+        return cols[:limit]
+    cols.sort(key=lambda c: (0 if c == first else 1 if OUTCOME_HINTS.search(c) else 2))
+    return cols[:limit]
+
+
+def _ab_suggestions(df: pd.DataFrame, mode: str, limit: int, gate: bool = True,
+                    analysis: str = "ab_test", assignment: str = "chose") -> list[dict]:
     group = _group_choice(df)
-    if group is None or not _has_ab_structure(df, group):
+    if group is None or (gate and not _has_ab_structure(df, group)):
         return []
     base = _ab_heuristic("", df)
     group, control, treatment = base["group_col"], base["control"], base["treatment"]
     if control == treatment:
         return []
-    outcomes = [c for c in df.columns
-                if c != group and pd.api.types.is_numeric_dtype(df[c]) and not is_idlike(df, c)]
-    outcomes.sort(key=lambda c: (0 if c == base["outcome_col"] else 1 if OUTCOME_HINTS.search(c) else 2))
+    tail = ", and for whom?" if mode == "research" else "?"
     out = []
-    for o in outcomes[:limit]:
-        spec = ABTestSpec(group_col=group, control=control, treatment=treatment, outcome_col=o)
+    for o in _outcomes(df, (group,), base["outcome_col"], limit, after_choice=analysis == "observational"):
+        if analysis == "observational":
+            spec = ObservationalSpec(group_col=group, control=control, treatment=treatment, outcome_col=o,
+                                     assignment=assignment)
+            spec = spec.model_copy(update={"covariates": default_covariates(df, spec)})
+            if not spec.covariates:
+                continue
+            text = f"Is '{treatment}' linked to a different {_what(df, o)} than '{control}'{tail}"
+        else:
+            spec = ABTestSpec(group_col=group, control=control, treatment=treatment, outcome_col=o)
+            text = f"Did '{treatment}' change {_what(df, o)} vs '{control}'{tail}"
         if validate_spec(df, spec):
             continue
-        what = f"{humanize(o)} rate" if detect_outcome_kind(df[o]) == "binary" else f"average {humanize(o)}"
-        tail = ", and for whom?" if mode == "research" else "?"
-        out.append({"text": f"Did '{treatment}' change {what} vs '{control}'{tail}", "spec": spec.model_dump()})
+        out.append({"text": text, "spec": spec.model_dump()})
     return out
 
 
-def _ba_suggestions(df: pd.DataFrame, mode: str, limit: int) -> list[dict]:
+def _ba_suggestions(df: pd.DataFrame, mode: str, limit: int, with_group: bool = False) -> list[dict]:
     dcols = date_columns(df)
     if not dcols:
         return []
     dcol = dcols[0]
-    outcomes = [c for c in df.columns if c != dcol and pd.api.types.is_numeric_dtype(df[c]) and not is_idlike(df, c)]
-    outcomes.sort(key=lambda c: (1 if OUTCOME_HINTS.search(c) is None else 0))
+    tail = ", and for whom?" if mode == "research" else "?"
     out = []
-    for o in outcomes[:limit]:
+    if with_group:
+        group = _group_choice(df)
+        if group is None:
+            return []
+        comparison, treated = _levels_pair(df, group)
+        for o in _outcomes(df, (dcol, group), None, limit):
+            spec = DiDSpec(date_col=dcol, outcome_col=o, change_date="", group_col=group, treated=treated,
+                           comparison=comparison)
+            out.append({"text": f"Did {_what(df, o)} change more for '{treated}' than '{comparison}' after a date I pick{tail}",
+                        "spec": spec.model_dump(), "needs_date": True})
+        return out
+    for o in _outcomes(df, (dcol,), None, limit):
         spec = BeforeAfterSpec(date_col=dcol, outcome_col=o, change_date="")
-        what = f"{humanize(o)} rate" if detect_outcome_kind(df[o]) == "binary" else f"average {humanize(o)}"
-        tail = ", and for whom?" if mode == "research" else "?"
-        out.append({"text": f"Did {what} change after a date I pick{tail}", "spec": spec.model_dump(),
+        out.append({"text": f"Did {_what(df, o)} change after a date I pick{tail}", "spec": spec.model_dump(),
                     "needs_date": True})
     return out
 
 
-def suggest_questions(df: pd.DataFrame, mode: str, limit: int = 4) -> list[dict]:
+def suggest_questions(df: pd.DataFrame, mode: str, limit: int = 4, design: str | None = None) -> list[dict]:
     """Ready-made questions built from the file's own columns.
 
-    Each one carries a finished spec, so picking one skips the guessing step.
-    A-vs-B questions appear only when the file really has a version column; before/after
-    questions appear when the file has a date column.
+    With a design (how people got the change) the list is for that design only. Without one,
+    A-vs-B questions appear when the file has a version column and before/after ones when it has dates.
     """
     try:
+        if design == "random":
+            return _ab_suggestions(df, mode, limit, gate=False)
+        if design in ("chose", "unsure"):
+            return _ab_suggestions(df, mode, limit, gate=False, analysis="observational", assignment=design)
+        if design == "one_date":
+            return _ba_suggestions(df, mode, limit)
+        if design == "one_date_comparison":
+            return _ba_suggestions(df, mode, limit, with_group=True)
         ab = _ab_suggestions(df, mode, limit)
         ba = _ba_suggestions(df, mode, 2)
     except Exception:

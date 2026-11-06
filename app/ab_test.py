@@ -14,7 +14,7 @@ import statsmodels
 from scipy import stats
 from statsmodels.stats.proportion import proportion_confint
 
-from .checks import detect_outcome_kind, has_blocking_failure, run_checks, validate_spec_against_data
+from .checks import balance_check, detect_outcome_kind, has_blocking_failure, run_checks, validate_spec_against_data
 from .interpret import chance_phrase, fmt_num, fmt_pct, humanize
 from .knowledge import attach_method_info, item
 from .modes import SEED, apply_mode, effect
@@ -32,7 +32,7 @@ def analyze(df: pd.DataFrame, spec: ABTestSpec, csv_name: str = "your_file.csv",
         r.mode = mode
         return r
 
-    checks = run_checks(df, spec)
+    checks = run_checks(df, spec) + [balance_check(df, spec)]
     if has_blocking_failure(checks):
         r = _blocked("Can't answer yet.", [c.message for c in checks if c.status == "fail"], spec, checks)
         r.mode = mode
@@ -144,8 +144,11 @@ def _assemble(*, spec, kind, label, checks, arms, e, rel, mde, unit_pts, method_
     if warn_n:
         how_sure += f" {warn_n} data warning{'s' if warn_n > 1 else ''}: see checks."
 
+    alike = next((c.status for c in checks if c.name == "Groups alike"), None)
     causal = ("Cause and effect only if people got versions at random. "
               "If they chose, it just shows the two moved together.")
+    if alike == "pass":
+        causal += " The groups look alike on other columns, which fits a random split."
     cannot = ["Why it happened.", "Whether it lasts.", "People outside this file."]
 
     ci_key, p_key = ("ci_binary", "p_binary") if method_kind == "binary" else ("ci_mean", "p_mean")
@@ -173,7 +176,7 @@ def _assemble(*, spec, kind, label, checks, arms, e, rel, mde, unit_pts, method_
 
     return Report(
         headline=headline, answer=answer, how_sure=how_sure, verdict=verdict, causal_label=causal,
-        checks=checks, arms=arms,
+        design="random", checks=checks, arms=arms,
         effect={"diff": diff, "ci_low": lo, "ci_high": hi, "p_value": p_value, "rel": None if rel != rel else rel,
                 "mde": mde, "unit_pts": unit_pts},
         outcome_kind=kind, outcome_label=label, cannot_tell=cannot, audit=audit, spec=spec,

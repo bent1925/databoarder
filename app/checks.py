@@ -147,5 +147,39 @@ def run_checks(df: pd.DataFrame, spec: ABTestSpec) -> list[Check]:
     return checks
 
 
+def balance_check(df: pd.DataFrame, spec) -> Check:
+    """If people were split at random, the two groups should look alike on everything else.
+
+    Tests every other column (t-test for numbers, chi-square for categories), corrects for the
+    number of tests, and only complains if something is clearly off (adjusted p < 0.01).
+    """
+    from statsmodels.stats.multitest import multipletests
+
+    g = df[spec.group_col].astype(str)
+    sub = df[g.isin([spec.control, spec.treatment])]
+    gs = sub[spec.group_col].astype(str)
+    found: list[tuple[str, float]] = []
+    for col in sub.columns:
+        if col in (spec.group_col, spec.outcome_col) or is_idlike(sub, col):
+            continue
+        s = sub[col]
+        if pd.api.types.is_numeric_dtype(s):
+            a, b = s[gs == spec.control].dropna(), s[gs == spec.treatment].dropna()
+            if len(a) > 1 and len(b) > 1 and (a.var() > 0 or b.var() > 0):
+                found.append((col, float(stats.ttest_ind(a, b, equal_var=False).pvalue)))
+        elif 2 <= s.nunique(dropna=True) <= 20:
+            tab = pd.crosstab(s.astype(str), gs)
+            if tab.shape[0] >= 2 and tab.shape[1] == 2:
+                found.append((col, float(stats.chi2_contingency(tab)[1])))
+    if not found:
+        return Check(name="Groups alike", status="info", message="No other columns to compare.")
+    adj = multipletests([p for _, p in found], method="holm")[1]
+    k = int(np.argmin(adj))
+    if adj[k] < 0.01:
+        return Check(name="Groups alike", status="warn",
+                     message=f"Groups differ on '{found[k][0]}'. If this was a random split, something is off.")
+    return Check(name="Groups alike", status="pass", message="Groups look alike on other columns.")
+
+
 def has_blocking_failure(checks: list[Check]) -> bool:
     return any(c.status == "fail" for c in checks)

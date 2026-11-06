@@ -51,6 +51,49 @@ class BeforeAfterSpec(BaseModel):
             raise ValueError("change_date must look like 2026-08-30")
 
 
+class DiDSpec(BaseModel):
+    """Before/after, but with a comparison group that never got the change.
+
+    We compare how the gap between the two groups moved. Anything that hit both groups
+    (season, news, holidays) cancels out.
+    """
+
+    analysis_type: Literal["diff_in_diff"] = "diff_in_diff"
+    date_col: str
+    change_date: str = ""
+    outcome_col: str
+    aggregate: Literal["average", "total"] = "average"
+    group_col: str = Field(description="Column saying which group each row belongs to")
+    treated: str = Field(description="Value for the group that got the change")
+    comparison: str = Field(description="Value for the group that never got it")
+
+    @field_validator("change_date")
+    @classmethod
+    def _iso(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            return ""
+        try:
+            return _dt.date.fromisoformat(v[:10]).isoformat()
+        except ValueError:
+            raise ValueError("change_date must look like 2026-08-30")
+
+
+class ObservationalSpec(BaseModel):
+    """Two groups that people sorted themselves into. Compares people who look alike.
+
+    Never read as cause and effect: it can only adjust for columns that are in the file.
+    """
+
+    analysis_type: Literal["observational"] = "observational"
+    group_col: str
+    control: str
+    treatment: str
+    outcome_col: str
+    covariates: list[str] = Field(default_factory=list, description="Columns to make people comparable on")
+    assignment: Literal["chose", "unsure"] = "chose"
+
+
 def _spec_tag(v) -> str:
     if isinstance(v, dict):
         return v.get("analysis_type", "ab_test")
@@ -59,7 +102,8 @@ def _spec_tag(v) -> str:
 
 # Either kind of question. A missing analysis_type means A/B test (how v1 specs were written).
 AnySpec = Annotated[
-    Union[Annotated[ABTestSpec, Tag("ab_test")], Annotated[BeforeAfterSpec, Tag("before_after")]],
+    Union[Annotated[ABTestSpec, Tag("ab_test")], Annotated[BeforeAfterSpec, Tag("before_after")],
+          Annotated[DiDSpec, Tag("diff_in_diff")], Annotated[ObservationalSpec, Tag("observational")]],
     Discriminator(_spec_tag),
 ]
 
@@ -146,7 +190,9 @@ class ArmSummary(BaseModel):
 
 
 class Report(BaseModel):
-    analysis: Literal["ab_test", "before_after"] = "ab_test"
+    analysis: Literal["ab_test", "before_after", "diff_in_diff", "observational"] = "ab_test"
+    design: str = ""                   # how people got the change, as the person told us
+    adjusted_for: list[str] = []       # observational: columns people were matched up on
     # Layer 1: the answer
     headline: str
     answer: str
