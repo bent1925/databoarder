@@ -77,7 +77,9 @@
   .qopt small { display: block; color: var(--muted); font-weight: 700; font-size: 12.5px; }
   textarea { width: 100%; min-height: 80px; resize: vertical; border: 2.5px solid var(--ink); border-radius: 16px; padding: 12px 14px;
     font: inherit; font-weight: 600; background: #fff; color: var(--ink); margin-top: 2px; }
-  textarea:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 1px; }
+  input[type=date] { width: 100%; padding: 8px 10px; border-radius: 12px; border: 2.5px solid var(--ink); background: #fff; color: var(--ink); font: inherit; font-weight: 700; }
+  input[type=date].need { background: var(--yellow-soft); border-style: dashed; }
+  textarea:focus, select:focus, input[type=date]:focus { outline: 3px solid var(--yellow); outline-offset: 1px; }
   .readback { font-size: 18px; font-weight: 800; background: var(--purple-soft); border: 2.5px solid var(--ink); border-radius: 18px; padding: 14px 16px; }
   .note { font-size: 14px; font-weight: 700; background: var(--orange-soft); border: 2px solid var(--ink); border-radius: 14px; padding: 7px 12px; margin-top: 10px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 14px; }
@@ -162,7 +164,7 @@
       <input type="file" id="file" accept=".csv,text/csv" class="hidden">
     </div>
     <div id="fileinfo" class="hidden"></div>
-    <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🍪 Try a sample</button></div>
+    <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🛒 A/B test sample</button> · <button class="linkish" id="sample2">📅 Before/after sample</button></div>
     <div id="err1" class="err"></div>
   </section>
 
@@ -188,10 +190,13 @@
       <button class="linkish" id="adjust">✏️ Change</button>
     </div>
     <div class="grid hidden" id="adjustgrid">
-      <div><label class="f">Group column</label><select id="f_group"></select></div>
-      <div><label class="f">Baseline</label><select id="f_control"></select></div>
-      <div><label class="f">New version</label><select id="f_treat"></select></div>
+      <div class="ab"><label class="f">Group column</label><select id="f_group"></select></div>
+      <div class="ab"><label class="f">Baseline</label><select id="f_control"></select></div>
+      <div class="ab"><label class="f">New version</label><select id="f_treat"></select></div>
+      <div class="ba"><label class="f">Date column</label><select id="f_date"></select></div>
+      <div class="ba"><label class="f">📅 Change happened on</label><input type="date" id="f_when"></div>
       <div><label class="f">Measure</label><select id="f_outcome"></select></div>
+      <div class="ba" id="agg_wrap"><label class="f">Each day uses</label><select id="f_agg"><option value="average">Its average</option><option value="total">Its total</option></select></div>
     </div>
     <div id="err4" class="err"></div>
   </section>
@@ -209,7 +214,8 @@ const MODES = {
 };
 const STATUS = { pass: "✅", warn: "⚠️", fail: "❌", info: "💡" };
 const ASSUME = { ok: "✅", warn: "⚠️", manual: "🙋" };
-const CHECK_EMOJI = { "Sample size": "👥", "Missing results": "🕳️", "Missing balance": "⚖️", "Repeat people": "🔂", "Group balance": "⚖️", "Extreme values": "🏔️", "Question fits data": "🧩" };
+const CHECK_EMOJI = { "Weeks of data": "🗓️", "Missing days": "📆", "Steady before": "📏", "Weeks related": "🔗", "Dates": "📅", "Sample size": "👥", "Missing results": "🕳️", "Missing balance": "⚖️", "Repeat people": "🔂", "Group balance": "⚖️", "Extreme values": "🏔️", "Question fits data": "🧩" };
+const isBA = (spec) => spec && spec.analysis_type === "before_after";
 const state = { ds: null, mode: "quick", questions: [], choice: 0, spec: null, readback: "", assumed: false };
 
 async function api(path, opts) {
@@ -228,10 +234,12 @@ $("file").onchange = (e) => e.target.files[0] && upload(e.target.files[0]);
 ["dragover", "dragenter"].forEach((t) => $("drop").addEventListener(t, (e) => { e.preventDefault(); $("drop").classList.add("over"); }));
 ["dragleave", "drop"].forEach((t) => $("drop").addEventListener(t, (e) => { e.preventDefault(); $("drop").classList.remove("over"); }));
 $("drop").addEventListener("drop", (e) => e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]));
-$("sample").onclick = async () => {
-  const blob = await (await fetch("/static/checkout_test.csv")).blob();
-  upload(new File([blob], "checkout_test.csv", { type: "text/csv" }));
+const loadSample = (name) => async () => {
+  const blob = await (await fetch("/static/" + name)).blob();
+  upload(new File([blob], name, { type: "text/csv" }));
 };
+$("sample").onclick = loadSample("checkout_test.csv");
+$("sample2").onclick = loadSample("signup_page_change.csv");
 
 async function upload(file) {
   $("err1").textContent = "";
@@ -267,7 +275,7 @@ async function loadQuestions() {
   renderQuestions();
 }
 function renderQuestions() {
-  const items = state.questions.map((q, i) => ({ id: i, em: "📈", text: q.text, sub: i === 0 ? "Suggested" : "" }));
+  const items = state.questions.map((q, i) => ({ id: i, em: q.needs_date ? "📅" : "📈", text: q.text, sub: i === 0 ? "Suggested" : "" }));
   items.push({ id: "other", em: "✏️", text: "Something else…", sub: "" });
   $("qlist").innerHTML = items.map((it) => `
     <label class="qopt ${state.choice === it.id ? "on" : ""}" data-id="${it.id}">
@@ -294,7 +302,7 @@ $("go").onclick = async () => {
     } else {
       state.spec = state.questions[state.choice].spec;
       state.readback = (await post("/api/readback", { dataset_id: state.ds.dataset_id, spec: state.spec })).readback;
-      if (state.mode === "quick") { state.assumed = true; $("s4").classList.add("hidden"); await run(); }
+      if (state.mode === "quick" && !(isBA(state.spec) && !state.spec.change_date)) { state.assumed = true; $("s4").classList.add("hidden"); await run(); }
       else { await openConfirm([]); }
     }
   } catch (e) { $("err3").textContent = "😕 " + e.message; }
@@ -312,20 +320,51 @@ async function openConfirm(notes = []) {
   $("readback").textContent = state.readback;
   $("notes").innerHTML = notes.map((n) => `<div class="note">💡 ${esc(n)}</div>`).join("");
   const s = state.spec, cols = state.ds.columns.map((c) => c.name), numeric = state.ds.columns.filter((c) => c.type === "number").map((c) => c.name);
-  fillSelect($("f_group"), cols, s.group_col);
-  const lv = await levelsFor(s.group_col);
-  fillSelect($("f_control"), lv, s.control); fillSelect($("f_treat"), lv, s.treatment); fillSelect($("f_outcome"), numeric, s.outcome_col);
+  const ba = isBA(s);
+  document.querySelectorAll("#adjustgrid .ab").forEach((el) => el.classList.toggle("hidden", ba));
+  document.querySelectorAll("#adjustgrid .ba").forEach((el) => el.classList.toggle("hidden", !ba));
+  fillSelect($("f_outcome"), numeric, s.outcome_col);
+  if (ba) {
+    const dates = state.ds.columns.filter((c) => c.type === "date");
+    fillSelect($("f_date"), dates.map((c) => c.name), s.date_col);
+    $("f_agg").value = s.aggregate || "average";
+    setDateBounds();
+    $("f_when").value = s.change_date || "";
+    $("f_when").classList.toggle("need", !s.change_date);
+    $("adjustgrid").classList.remove("hidden");              // the date is required, so show it
+  } else {
+    fillSelect($("f_group"), cols, s.group_col);
+    const lv = await levelsFor(s.group_col);
+    fillSelect($("f_control"), lv, s.control); fillSelect($("f_treat"), lv, s.treatment);
+  }
   $("s4").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function setDateBounds() {
+  const c = state.ds.columns.find((x) => x.name === $("f_date").value) || {};
+  $("f_when").min = c.date_min || ""; $("f_when").max = c.date_max || "";
+  $("agg_wrap").classList.toggle("hidden", !(c.rows_per_day > 1.05));
 }
 $("adjust").onclick = () => $("adjustgrid").classList.toggle("hidden");
 async function specChanged(groupChanged) {
-  if (groupChanged) { const lv = await levelsFor($("f_group").value); fillSelect($("f_control"), lv, lv[0]); fillSelect($("f_treat"), lv, lv[1] || lv[0]); }
-  state.spec = { analysis_type: "ab_test", group_col: $("f_group").value, control: $("f_control").value, treatment: $("f_treat").value, outcome_col: $("f_outcome").value };
+  if (isBA(state.spec)) {
+    if (groupChanged) setDateBounds();
+    state.spec = { analysis_type: "before_after", date_col: $("f_date").value, change_date: $("f_when").value,
+                   outcome_col: $("f_outcome").value, aggregate: $("agg_wrap").classList.contains("hidden") ? "average" : $("f_agg").value };
+    $("f_when").classList.toggle("need", !state.spec.change_date);
+  } else {
+    if (groupChanged) { const lv = await levelsFor($("f_group").value); fillSelect($("f_control"), lv, lv[0]); fillSelect($("f_treat"), lv, lv[1] || lv[0]); }
+    state.spec = { analysis_type: "ab_test", group_col: $("f_group").value, control: $("f_control").value, treatment: $("f_treat").value, outcome_col: $("f_outcome").value };
+  }
   try { state.readback = (await post("/api/readback", { dataset_id: state.ds.dataset_id, spec: state.spec })).readback; $("readback").textContent = state.readback; } catch (e) {}
 }
 $("f_group").onchange = () => specChanged(true);
-["f_control", "f_treat", "f_outcome"].forEach((id) => ($(id).onchange = () => specChanged(false)));
-$("runbtn").onclick = async () => { $("err4").textContent = ""; busy($("runbtn"), true, "Crunching…"); try { await run(); } catch (e) { $("err4").textContent = "😕 " + e.message; } busy($("runbtn"), false); };
+$("f_date").onchange = () => specChanged(true);
+["f_control", "f_treat", "f_outcome", "f_when", "f_agg"].forEach((id) => ($(id).onchange = () => specChanged(false)));
+$("runbtn").onclick = async () => {
+  $("err4").textContent = "";
+  if (isBA(state.spec) && !state.spec.change_date) { $("err4").textContent = "📅 Pick the date the change happened first."; $("f_when").focus(); return; }
+  busy($("runbtn"), true, "Crunching…"); try { await run(); } catch (e) { $("err4").textContent = "😕 " + e.message; } busy($("runbtn"), false);
+};
 
 async function run() {
   renderReport(await post("/api/run", { dataset_id: state.ds.dataset_id, spec: state.spec, mode: state.mode }));
@@ -355,6 +394,34 @@ function intervalChart(rows, o) {
       <text x="${x(r.est)}" y="${y - 15}" text-anchor="middle" class="lbl">${o.fmt(r.est)}</text>`;
   });
   return s + "</svg>";
+}
+
+function dayLabel(iso) { const [y, m, d] = iso.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); }
+function seriesChart(sr, m, fmt) {
+  const W = 760, H = 290, padL = 54, padR = 18, padT = 26, padB = 34, n = sr.dates.length;
+  const vals = sr.values.map((v) => (v == null ? null : v * m)), sm = sr.smooth.map((v) => (v == null ? null : v * m));
+  const bm = sr.before_mean * m, am = sr.after_mean * m;
+  const all = vals.filter((v) => v != null).concat([bm, am]);
+  let lo = Math.min(...all), hi = Math.max(...all); const pad = (hi - lo) * 0.1 || 1; lo -= pad; hi += pad;
+  const x = (i) => padL + (i / Math.max(n - 1, 1)) * (W - padL - padR), y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+  const ci = sr.dates.indexOf(sr.change_date);
+  const from = sr.before_from ? sr.dates.indexOf(sr.before_from) : 0, to = sr.after_to ? sr.dates.indexOf(sr.after_to) : n - 1;
+  let g = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Daily values over time with the change date marked">`;
+  ticks(lo, hi, 4).forEach((t) => { g += `<line x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="2"/><text x="${padL - 8}" y="${y(t) + 4}" text-anchor="end">${fmt(t)}</text>`; });
+  const xt = 5; for (let k = 0; k <= xt; k++) { const i = Math.round((k / xt) * (n - 1)); g += `<text x="${x(i)}" y="${H - 10}" text-anchor="${k === 0 ? "start" : k === xt ? "end" : "middle"}">${dayLabel(sr.dates[i])}</text>`; }
+  vals.forEach((v, i) => { if (v != null) g += `<circle cx="${x(i)}" cy="${y(v)}" r="2.6" fill="${i < ci ? "var(--orange)" : "var(--purple)"}" opacity=".28"/>`; });
+  const path = (a, b, color) => {   // smoothed line, broken at gaps
+    let d = "", pen = false;
+    for (let i = a; i < b; i++) { if (sm[i] == null) { pen = false; continue; } d += `${pen ? "L" : "M"}${x(i).toFixed(1)} ${y(sm[i]).toFixed(1)}`; pen = true; }
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  };
+  g += path(0, ci, "var(--orange)") + path(ci, n, "var(--purple)");
+  g += `<line x1="${x(from)}" x2="${x(ci)}" y1="${y(bm)}" y2="${y(bm)}" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="2 5" stroke-linecap="round"/>
+        <line x1="${x(ci)}" x2="${x(to)}" y1="${y(am)}" y2="${y(am)}" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="2 5" stroke-linecap="round"/>
+        <text class="lbl" x="${x(from) + 4}" y="${y(bm) - 8}">${fmt(bm)}</text><text class="lbl" x="${x(to) - 4}" y="${y(am) - 8}" text-anchor="end">${fmt(am)}</text>
+        <line x1="${x(ci)}" x2="${x(ci)}" y1="${padT - 4}" y2="${H - padB}" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="5 4"/>
+        <text class="lbl" x="${x(ci)}" y="${padT - 10}" text-anchor="middle">📅 ${dayLabel(sr.change_date)}</text>`;
+  return g + "</svg>";
 }
 
 /* ---------- tabs ---------- */
@@ -387,7 +454,7 @@ function renderReport(r) {
   if (r.mode === "right_answer" && ok) {
     h += r.review_items.length
       ? `<div class="banner warn">⚠️ Check first<ul>${r.review_items.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`
-      : `<div class="banner good">🏅 All checks clean. ${esc(r.robust_summary.replace(/^Holds up:\s*/, "").replace(/^./, (c) => c.toUpperCase()))}</div>`;
+      : `<div class="banner good">🏅 All checks clean. ${esc(r.robust_summary.replace(/^Holds up( so far)?:\s*/, "").replace(/^./, (c) => c.toUpperCase()))}</div>`;
   }
 
   h += `<div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h2>${esc(r.headline)}</h2><p>${esc(r.answer)}</p>${r.how_sure ? `<p class="sure">${esc(r.how_sure)}</p>` : ""}</div></div>`;
@@ -396,6 +463,8 @@ function renderReport(r) {
     const arms = r.arms.map((a, i) => ({ label: a.name, est: a.estimate * m, lo: a.ci_low * m, hi: a.ci_high * m, color: i ? "var(--purple)" : "var(--orange)" }));
     const e = r.effect;
     const diff = [{ label: "Difference", est: e.diff * m, lo: e.ci_low * m, hi: e.ci_high * m, color: r.verdict === "clear_difference" ? "var(--green)" : "var(--blue)" }];
+    if (r.series) h += `<div class="card"><p class="title"><span class="ic o">📈</span> Over time</p>${seriesChart(r.series, m, f1)}
+      <div class="cap">Dots = each day. Lines = smoothed. Dotted = typical day, before and after (whole weeks only).</div></div>`;
     h += `<div class="card"><p class="title"><span class="ic p">📊</span> The picture</p><div class="charts">
       <div><p class="ct">${esc(r.outcome_label[0].toUpperCase() + r.outcome_label.slice(1))}</p>${intervalChart(arms, { fmt: f1, aria: "Result per group with likely range", floor0: pts })}<div class="cap">Dot = what we saw. Line = likely range.</div></div>
       <div><p class="ct">The difference</p>${intervalChart(diff, { fmt: fd, zero: true, aria: "Difference with likely range" })}<div class="cap">Line touches the dashed 0 = could be no change.</div></div>
@@ -404,12 +473,12 @@ function renderReport(r) {
 
   if (r.mode === "right_answer" && r.robustness.length) {
     h += `<div class="card"><p class="title"><span class="ic g">🧪</span> Cross-checks</p>
-      ${r.robustness.map((x) => item(x.agrees ? "✅" : "⚠️", x.name, x.result + " " + x.description)).join("")}</div>`;
+      ${r.robustness.map((x) => item(x.weak ? "🤷" : x.agrees ? "✅" : "⚠️", x.name, x.result + " " + x.description)).join("")}</div>`;
   }
 
   if (r.mode === "research" && ok) {
     h += `<div class="card"><p class="title"><span class="ic b">🔍</span> Who's different?</p><p class="muted" style="margin:0 0 10px;font-weight:700">${esc(r.segment_note)}</p>
-      ${r.segments.length ? `<div class="scroll"><table><thead><tr><th>Slice</th><th>Rows</th><th>Difference</th><th>If nothing changed*</th></tr></thead><tbody>
+      ${r.segments.length ? `<div class="scroll"><table><thead><tr><th>Slice</th><th>${r.analysis === "before_after" ? "Weeks" : "Rows"}</th><th>Difference</th><th>If nothing changed*</th></tr></thead><tbody>
       ${r.segments.map((s) => `<tr class="${s.flagged ? "flag" : ""}"><td>${s.flagged ? "⭐ " : ""}<b>${esc(s.column)}</b> = ${esc(s.level)}</td><td>${s.n_control.toLocaleString()} / ${s.n_treatment.toLocaleString()}</td>
         <td class="v">${fd(s.diff * m)} <span class="muted" style="font-weight:600">(${fd(s.ci_low * m)} to ${fd(s.ci_high * m)})</span></td><td>${s.p_adj < 0.001 ? "&lt; 0.1%" : (s.p_adj * 100).toFixed(0) + "%"}</td></tr>`).join("")}</tbody></table></div>
       <div class="cap">*How often a gap this big would appear, adjusted for checking many slices.</div>` : ""}</div>`;
@@ -425,7 +494,7 @@ function renderReport(r) {
       ${r.audit.map((a) => `<tr><td>${esc(a.label)}</td><td class="v">${esc(a.value)}</td><td>${esc(a[key])}</td></tr>`).join("")}</tbody></table></div>`;
   const rp = r.repro || {}, ver = rp.versions || {};
   const repro = r.audit.length ? `
-      <div class="fp">🔖 Data fingerprint <code>${esc((rp.data_sha256 || "n/a").slice(0, 16))}</code> · ${(rp.rows_used || 0).toLocaleString()} rows · seed ${esc(rp.seed)} ·
+      <div class="fp">🔖 Data fingerprint <code>${esc((rp.data_sha256 || "n/a").slice(0, 16))}</code> · ${(rp.rows_used || 0).toLocaleString()} rows${rp.weeks_used ? " · " + esc(rp.weeks_used) + " weeks" : ""} · seed ${esc(rp.seed)} ·
         ${Object.entries(ver).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(" · ")}</div>
       <div class="scroll"><table><thead><tr><th>Number</th><th>How</th></tr></thead><tbody>
         ${r.audit.map((a) => `<tr><td>${esc(a.label)}</td><td>${esc(a.method)}<br><code>${esc(a.code)}</code></td></tr>`).join("")}</tbody></table></div>

@@ -12,8 +12,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .ab_test import analyze
-from .schemas import ABTestSpec, Mode
+from .analysis import analyze
+from .schemas import AnySpec, Mode
 from .translator import interpret, profile_columns, readback, suggest_questions
 
 app = FastAPI(title="Data Science Dashboarder")
@@ -31,7 +31,7 @@ class AskBody(BaseModel):
 
 class RunBody(BaseModel):
     dataset_id: str
-    spec: ABTestSpec
+    spec: AnySpec
     mode: Mode = "quick"
 
 

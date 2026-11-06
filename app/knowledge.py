@@ -73,6 +73,50 @@ STATS: dict[str, dict[str, str]] = {
         "technical": "Welch's t-test after dropping pooled values below the 1st or above the 99th percentile.",
         "plain": "The same question without the extreme values.",
     },
+    "ba_level": {
+        "technical": "Mean of weekly averages. Each week is 7 consecutive days counted outward from the change date; each day's value is that day's average (or total) of the result. Every weekday appears once per week, so weekday patterns cancel.",
+        "plain": "The typical day in this period, with weekend dips evened out.",
+    },
+    "ba_arm_ci": {
+        "technical": "95% t-interval for the mean of the weekly averages in that period (n − 1 degrees of freedom, n = number of weeks).",
+        "plain": "Where the typical day in this period likely sits.",
+    },
+    "ba_diff": {
+        "technical": "Mean of after-weeks minus mean of before-weeks (weekly averages).",
+        "plain": "How far the typical day moved after the date.",
+    },
+    "ba_ci": {
+        "technical": "95% interval for the difference of two means from Welch's t-distribution, computed on weekly averages (Welch–Satterthwaite degrees of freedom). Across repeated samples, about 95% of such intervals contain the true change.",
+        "plain": "Likely range for the true change. Wide = unsure. Includes 0 = could be no change.",
+    },
+    "ba_p": {
+        "technical": "Two-sided p-value of Welch's t-test on weekly averages of H0: the mean level is the same before and after. P(a result at least this extreme | H0).",
+        "plain": "If nothing changed, how often a gap this big would appear. Small = hard to blame on chance. Not the chance the result is wrong.",
+    },
+    "ba_mde": {
+        "technical": "Smallest true change detected with 80% power at two-sided α = 0.05: (1.96 + 0.84) × standard error of the difference ≈ 2.80 × SE, using the observed SE.",
+        "plain": "Real changes smaller than this will probably be missed.",
+    },
+    "ba_weeks": {
+        "technical": "Whole 7-day blocks starting at change_date + 7k days (after) or change_date − 7k days (before). A block with any missing day is skipped; days outside whole blocks are unused here.",
+        "plain": "How many full weeks the comparison rests on. More weeks = steadier answer.",
+    },
+    "placebo": {
+        "technical": "Welch's t-test on the before-period weeks only, split into an earlier and a later half at a pretend change date. H0: equal means. A valid method should rarely reject here.",
+        "plain": "Pick a fake date when nothing happened. If we 'find' a change anyway, drift or noise is fooling us.",
+    },
+    "its": {
+        "technical": "Ordinary least squares of weekly averages on an intercept, an after-the-date indicator and a linear week index (one slope across the date). The indicator's coefficient is the level shift at the date after allowing a steady trend. Conventional t-based interval, n − 3 degrees of freedom.",
+        "plain": "Lets the number have been drifting already, then asks whether there is still a jump at the date.",
+    },
+    "window": {
+        "technical": "Welch's t-test on weekly averages using only the 4 weeks nearest the date on each side.",
+        "plain": "Looks only at weeks right around the date, so slow drift and far-away events matter less.",
+    },
+    "daily": {
+        "technical": "OLS on every observed day with an after-the-date indicator and weekday indicators; Newey–West (Bartlett kernel, 7 lags, n/(n − k) correction) standard errors; t-based p-value with n − k degrees of freedom.",
+        "plain": "Uses every single day, allowing for weekday patterns and for neighbouring days moving together.",
+    },
     "holm": {
         "technical": "Holm–Bonferroni step-down adjusted p-values. Keeps the chance of at least one false positive across all slices (family-wise error rate) at 5%.",
         "plain": "Chance figures corrected for checking many slices at once.",
@@ -166,6 +210,63 @@ def attach_method_info(rep: Report, kind: str, mode: str, checks: list[Check],
         if r.key in STATS:
             rep.audit.append(item(f"{r.name}: p-value", f"{r.p_value:.4g}", r.key,
                                   "See Reproduce script", "# see script"))
+    if mode == "research" and rep.segments:
+        rep.audit.append(item("Slices checked", str(len(rep.segments)), "holm",
+                              "Holm step-down over all slices", "multipletests(p, method='holm')"))
+    return rep
+
+
+# ----------------------------------------------------------------- before / after
+
+def build_methods_ba(mode: str, checks: list[Check], nb: int, na: int) -> list[MethodInfo]:
+    st = lambda name, default="manual": _status(checks, name, default)  # noqa: E731
+    weeks_ok = Assumption(text="3+ full weeks on each side", status="ok" if min(nb, na) >= 3 else "warn")
+    gaps = Assumption(text="Few missing days", status=st("Missing days", "ok"))
+    flat = Assumption(text="The number was flat before the date (no steady rise or fall)",
+                      status=st("Steady before"))
+    linked = Assumption(text="One week doesn't strongly push the next", status=st("Weeks related"))
+    manual = [
+        Assumption(text="Nothing else changed around the date", status="manual"),
+        Assumption(text="The date was chosen before looking at the results", status="manual"),
+        Assumption(text="The change took effect on that date (no slow roll-out)", status="manual"),
+    ]
+    main = [weeks_ok, gaps, flat, linked,
+            Assumption(text="No huge days dominate", status=st("Extreme values", "ok")), *manual]
+    methods = [MethodInfo(name="Main test (week-by-week, Welch t-test)", assumptions=main)]
+
+    if mode == "right_answer":
+        methods += [
+            MethodInfo(name="Fake-date test", assumptions=[
+                Assumption(text="6+ full weeks before the date", status="ok" if nb >= 6 else "warn"),
+                Assumption(text="Nothing happened on the fake date", status="manual")]),
+            MethodInfo(name="Allowing for a trend", assumptions=[
+                weeks_ok,
+                Assumption(text="Any earlier drift would have continued at the same pace", status="manual"),
+                manual[0]]),
+            MethodInfo(name="Nearby weeks only", assumptions=[
+                Assumption(text="More than 4 weeks on each side", status="ok" if min(nb, na) > 4 else "warn"),
+                Assumption(text="Nothing else changed in those weeks", status="manual")]),
+            MethodInfo(name="Day-by-day model", assumptions=[
+                Assumption(text="Weekday pattern is the same before and after", status="manual"),
+                Assumption(text="Day-to-day links fade within 7 days", status="manual"),
+                manual[0]]),
+        ]
+    if mode == "research":
+        methods.append(MethodInfo(name="Slice scan (Holm)", assumptions=[
+            Assumption(text="Every slice looked at is counted", status="ok"),
+            Assumption(text="4+ full weeks on each side in every slice", status="ok"),
+            Assumption(text="Slice columns describe people or places, not results", status="manual"),
+            Assumption(text="Slices weren't picked after seeing the results", status="manual"),
+            Assumption(text="Main-test assumptions hold inside each slice", status="manual"),
+        ]))
+    return methods
+
+
+def attach_method_info_ba(rep: Report, mode: str, checks: list[Check], nb: int, na: int) -> Report:
+    rep.methods = build_methods_ba(mode, checks, nb, na)
+    for r in rep.robustness:
+        if r.key in STATS:
+            rep.audit.append(item(f"{r.name}: p-value", f"{r.p_value:.4g}", r.key, "See Reproduce script", "# see script"))
     if mode == "research" and rep.segments:
         rep.audit.append(item("Slices checked", str(len(rep.segments)), "holm",
                               "Holm step-down over all slices", "multipletests(p, method='holm')"))

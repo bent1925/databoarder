@@ -110,3 +110,122 @@ if rows:
         print(f"slice {{col}}={{level}} diff={{d:.4f}} p_raw={{p_raw:.5f}} p_adj={{pa:.5f}}")
 ''')
     return "".join(out)
+
+
+# --------------------------------------------------------------------- before / after
+
+def build_ba_script(spec, csv_name: str, mode: str, header: str = "") -> str:
+    d, y, change, agg = spec.date_col, spec.outcome_col, spec.change_date, spec.aggregate
+    agg_line = "g.mean()" if agg == "average" else "g.sum(min_count=1)"
+    out = [f'''{header}import warnings
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from scipy import stats
+''']
+    if mode == "research":
+        out.append('''import re
+from statsmodels.stats.multitest import multipletests
+''')
+    out.append(f'''
+df = pd.read_csv({csv_name!r})
+change = pd.Timestamp({change!r})          # the first day of "after" (you chose it)
+
+def parse_dates(s):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        dt = pd.to_datetime(s, errors="coerce", utc=True)
+    return dt.dt.tz_localize(None).dt.normalize()
+
+def daily_series(frame):
+    """One number per calendar day: that day's {agg} of the result."""
+    f = pd.DataFrame({{"d": parse_dates(frame[{d!r}]), "y": pd.to_numeric(frame[{y!r}], errors="coerce")}}).dropna(subset=["d"])
+    g = f.groupby("d")["y"]
+    return {agg_line}.sort_index()
+
+def make_blocks(daily):
+    """Whole 7-day weeks counted outward from the change date. Weeks with a missing day are skipped."""
+    cal = daily.reindex(pd.date_range(daily.index.min(), daily.index.max(), freq="D"))
+    one = pd.Timedelta(days=1)
+    after, k = [], 0
+    while change + pd.Timedelta(days=7 * k + 6) <= cal.index[-1]:
+        v = cal.loc[change + pd.Timedelta(days=7 * k): change + pd.Timedelta(days=7 * k + 6)]
+        if v.notna().all():
+            after.append(float(v.mean()))
+        k += 1
+    before, k = [], 1
+    while change - pd.Timedelta(days=7 * k) >= cal.index[0]:
+        v = cal.loc[change - pd.Timedelta(days=7 * k): change - pd.Timedelta(days=7 * k) + 6 * one]
+        if v.notna().all():
+            before.append(float(v.mean()))
+        k += 1
+    return np.array(before[::-1]), np.array(after), cal
+
+def effect(c, t):
+    res = stats.ttest_ind(t, c, equal_var=False)   # Welch
+    ci = res.confidence_interval(0.95)
+    p = float(res.pvalue)
+    return float(t.mean() - c.mean()), float(ci.low), float(ci.high), p if np.isfinite(p) else 1.0
+
+before, after, cal = make_blocks(daily_series(df))
+diff, low, high, p = effect(before, after)
+print(f"weeks_before={{len(before)}} weeks_after={{len(after)}}")
+print(f"before_mean={{before.mean():.4f}} after_mean={{after.mean():.4f}}")
+print(f"diff={{diff:.4f}} low={{low:.4f}} high={{high:.4f}} p={{p:.5f}}")
+''')
+
+    if mode == "right_answer":
+        out.append('''
+# --- cross-checks ---
+if len(before) >= 6:                      # fake date: only weeks before the real date
+    h = len(before) // 2
+    print(f"placebo_p={effect(before[:h], before[h:])[3]:.5f}")
+
+n_b, n_a = len(before), len(after)
+y = np.concatenate([before, after])       # allow a steady trend, then look for a jump at the date
+X = np.column_stack([np.ones(n_b + n_a), np.r_[np.zeros(n_b), np.ones(n_a)], np.r_[np.arange(-n_b, 0), np.arange(0, n_a)]])
+fit = sm.OLS(y, X).fit()
+print(f"its_diff={fit.params[1]:.4f} its_p={fit.pvalues[1]:.5f}")
+
+if n_b > 4 and n_a > 4:                   # only the 4 weeks nearest the date
+    print(f"window_p={effect(before[-4:], after[:4])[3]:.5f}")
+
+obs = cal.dropna()                        # every day, weekday indicators, Newey-West errors
+X = np.column_stack([np.ones(len(obs)), (obs.index >= change).astype(float),
+                     pd.get_dummies(obs.index.weekday, drop_first=True).to_numpy(float)])
+if len(obs) >= 28 and np.linalg.matrix_rank(X) == X.shape[1]:
+    fit = sm.OLS(obs.to_numpy(float), X).fit(cov_type="HAC", cov_kwds={"maxlags": 7, "use_correction": True}, use_t=True)
+    print(f"daily_diff={fit.params[1]:.4f} daily_p={fit.pvalues[1]:.5f}")
+''')
+
+    if mode == "research":
+        out.append(f'''
+# --- slice scan (same comparison, inside each slice) ---
+ID_NAME = re.compile(r"(^id$|_id$|^id_|uuid|^user$|^customer$|^account$)", re.I)
+def idlike(col):
+    return bool(ID_NAME.search(col)) or (pd.api.types.is_integer_dtype(df[col]) and df[col].nunique() >= 0.9 * len(df))
+
+rows = []
+for col in df.columns:
+    if col in ({d!r}, {y!r}) or idlike(col):
+        continue
+    s = df[col]
+    if pd.api.types.is_numeric_dtype(s) or not (2 <= s.nunique() <= 8):
+        continue   # slice only on category columns; numeric columns are usually results
+    for level in sorted(s.dropna().astype(str).unique()):
+        part = df[s.astype(str) == level]
+        if part[{y!r}].notna().sum() == 0:
+            continue
+        daily = daily_series(part)
+        if len(daily) == 0 or daily.index.min() >= change or daily.index.max() < change:
+            continue
+        b, a, _ = make_blocks(daily)
+        if len(b) >= 4 and len(a) >= 4:
+            dd, lo, hi, p_raw = effect(b, a)
+            rows.append((col, level, dd, p_raw))
+if rows:
+    p_adj = multipletests([r[3] for r in rows], method="holm")[1]
+    for (col, level, dd, p_raw), pa in sorted(zip(rows, p_adj), key=lambda x: x[0][3]):
+        print(f"slice {{col}}={{level}} diff={{dd:.4f}} p_raw={{p_raw:.5f}} p_adj={{pa:.5f}}")
+''')
+    return "".join(out)

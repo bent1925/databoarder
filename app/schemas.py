@@ -5,9 +5,10 @@ so any question and any report can be compared side by side.
 """
 from __future__ import annotations
 
-from typing import Literal, Optional
+import datetime as _dt
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Discriminator, Field, Tag, field_validator
 
 
 class ABTestSpec(BaseModel):
@@ -24,10 +25,49 @@ class ABTestSpec(BaseModel):
     outcome_col: str = Field(description="Column holding the result being measured")
 
 
+class BeforeAfterSpec(BaseModel):
+    """Did a number change after a date? One row per day (or several rows per day).
+
+    The person supplies the date. We never search for the date that looks best,
+    because that would manufacture changes out of noise.
+    """
+
+    analysis_type: Literal["before_after"] = "before_after"
+    date_col: str = Field(description="Column holding the date of each row")
+    change_date: str = Field(default="", description="First day of 'after', as YYYY-MM-DD")
+    outcome_col: str = Field(description="Column holding the result being measured")
+    aggregate: Literal["average", "total"] = Field(
+        default="average", description="With several rows per day: use the day's average or the day's total")
+
+    @field_validator("change_date")
+    @classmethod
+    def _iso(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            return ""
+        try:
+            return _dt.date.fromisoformat(v[:10]).isoformat()
+        except ValueError:
+            raise ValueError("change_date must look like 2026-08-30")
+
+
+def _spec_tag(v) -> str:
+    if isinstance(v, dict):
+        return v.get("analysis_type", "ab_test")
+    return getattr(v, "analysis_type", "ab_test")
+
+
+# Either kind of question. A missing analysis_type means A/B test (how v1 specs were written).
+AnySpec = Annotated[
+    Union[Annotated[ABTestSpec, Tag("ab_test")], Annotated[BeforeAfterSpec, Tag("before_after")]],
+    Discriminator(_spec_tag),
+]
+
+
 class Interpretation(BaseModel):
     """What the translator returns: a spec plus how it got there."""
 
-    spec: ABTestSpec
+    spec: AnySpec
     readback: str  # plain-English restatement, built from the spec by code
     source: Literal["llm", "heuristic"]
     notes: list[str] = []
@@ -50,6 +90,7 @@ class Robustness(BaseModel):
     description: str
     result: str
     agrees: bool
+    weak: bool = False      # not contradicted, but too uncertain to confirm
     p_value: float = 1.0
 
 
@@ -105,6 +146,7 @@ class ArmSummary(BaseModel):
 
 
 class Report(BaseModel):
+    analysis: Literal["ab_test", "before_after"] = "ab_test"
     # Layer 1: the answer
     headline: str
     answer: str
@@ -115,7 +157,7 @@ class Report(BaseModel):
     checks: list[Check]
     arms: list[ArmSummary] = []
     effect: Optional[dict] = None
-    outcome_kind: Optional[Literal["rate", "average"]] = None
+    outcome_kind: Optional[Literal["rate", "average", "total"]] = None
     outcome_label: str = ""
     cannot_tell: list[str] = []
     # Mode-specific extras
@@ -132,4 +174,5 @@ class Report(BaseModel):
     repro: dict = {}                   # data fingerprint, library versions, seed
     audit: list[AuditItem] = []
     script: str = ""
-    spec: Optional[ABTestSpec] = None
+    series: Optional[dict] = None      # before/after: the daily line for the chart
+    spec: Optional[AnySpec] = None
