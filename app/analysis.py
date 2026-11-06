@@ -1,10 +1,13 @@
 """Picks the right recipe for the question. The front desk: one door, two kitchens."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from . import ab_test, before_after, did, observational
 from .checks import validate_spec_against_data
+from .prep import script_block
 from .schemas import Report
 
 
@@ -19,11 +22,18 @@ def validate_spec(df: pd.DataFrame, spec) -> list[str]:
 
 
 def analyze(df: pd.DataFrame, spec, csv_name: str = "your_file.csv", mode: str = "quick",
-            data_sha: str = "") -> Report:
+            data_sha: str = "", prep_steps: list | None = None) -> Report:
+    """`df` is the prepared data; `prep_steps` (from app.prep) are added to the script so it starts from the raw CSV."""
     if spec.analysis_type == "before_after":
-        return before_after.analyze(df, spec, csv_name, mode, data_sha)
-    if spec.analysis_type == "diff_in_diff":
-        return did.analyze(df, spec, csv_name, mode, data_sha)
-    if spec.analysis_type == "observational":
-        return observational.analyze(df, spec, csv_name, mode, data_sha)
-    return ab_test.analyze(df, spec, csv_name, mode, data_sha)
+        rep = before_after.analyze(df, spec, csv_name, mode, data_sha)
+    elif spec.analysis_type == "diff_in_diff":
+        rep = did.analyze(df, spec, csv_name, mode, data_sha)
+    elif spec.analysis_type == "observational":
+        rep = observational.analyze(df, spec, csv_name, mode, data_sha)
+    else:
+        rep = ab_test.analyze(df, spec, csv_name, mode, data_sha)
+    if prep_steps and rep.script:
+        rep.prep = [s.text for s in prep_steps]
+        rep.script = re.sub(r"^(df = pd\.read_csv\(.*\)\n)", lambda m: m.group(1) + script_block(prep_steps),
+                            rep.script, count=1, flags=re.M)
+    return rep

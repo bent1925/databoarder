@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .analysis import analyze
 from .schemas import AnySpec, Mode
 from .observational import covariate_candidates
+from .prep import prepare
 from .schemas import ObservationalSpec
 from .translator import design_options, interpret, profile_columns, readback, suggest_questions
 
@@ -57,8 +58,9 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, "Couldn't read that as a CSV file.")
     if df.shape[0] < 2 or df.shape[1] < 2:
         raise HTTPException(400, "The file needs at least 2 rows and 2 columns.")
+    df, steps, notes = prepare(df)
     dataset_id = uuid.uuid4().hex[:12]
-    DATASETS[dataset_id] = {"df": df, "name": file.filename or "your_file.csv",
+    DATASETS[dataset_id] = {"df": df, "prep": steps, "name": file.filename or "your_file.csv",
                             "sha": hashlib.sha256(raw).hexdigest()}
     return {
         "dataset_id": dataset_id,
@@ -66,6 +68,7 @@ async def upload(file: UploadFile = File(...)):
         "rows": int(df.shape[0]),
         "columns": profile_columns(df),
         "designs": design_options(df),
+        "prep": {"steps": [x.text for x in steps], "notes": notes},
         "preview": df.head(5).astype(object).where(df.head(5).notna(), None).to_dict("records"),
     }
 
@@ -94,7 +97,7 @@ def readback_for(body: RunBody):
 def run(body: RunBody):
     ds = _get(body.dataset_id)
     return analyze(ds["df"], body.spec, csv_name=ds["name"], mode=body.mode,
-                   data_sha=ds["sha"]).model_dump()
+                   data_sha=ds["sha"], prep_steps=ds["prep"]).model_dump()
 
 
 @app.get("/api/suggestions")

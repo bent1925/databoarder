@@ -46,3 +46,8 @@ Cutoff-style designs are not covered yet.
 
 Samples with planted truths: `regional_rollout.csv` (true extra effect +2.4 pts) and `loyalty_program.csv` (true effect +$5; raw gap is far larger).
 Tests: `tests/test_designs.py`.
+
+## Data preparation (app/prep.py)
+On upload the file is checked and only unambiguous fixes are applied: trimmed spaces, "$1,200" → numbers, yes/no outcomes → 1/0, empty columns dropped.
+Anything that changes meaning (exact duplicate rows, one-column-per-date layouts) is flagged, not changed.
+Each fix is a plain line of code that is also placed at the top of the downloadable script, which starts from the raw CSV. Tests: `tests/test_prep.py`.

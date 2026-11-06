@@ -276,6 +276,8 @@ async function upload(file) {
     <button class="linkish" id="togglePrev">👀 Peek</button> · <button class="linkish" id="swap">🔄 Other file</button>
     <div id="prev" class="scroll hidden" style="margin-top:12px"><table class="preview"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
     <tbody>${d.preview.map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  const pr = d.prep || { steps: [], notes: [] };
+  if (pr.steps.length || pr.notes.length) $("fileinfo").insertAdjacentHTML("beforeend", `<div class="adj" style="margin:12px 0 0">${pr.steps.length ? `🧹 Tidied for you (also in the script):<ul style="margin:4px 0 0;padding-left:20px;font-weight:700">${pr.steps.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}${pr.notes.map((t) => `<div class="note" style="margin-top:8px">💡 ${esc(t)}</div>`).join("")}</div>`);
   $("togglePrev").onclick = () => $("prev").classList.toggle("hidden");
   $("swap").onclick = () => location.reload();
   $("s2").classList.remove("hidden"); $("s2b").classList.remove("hidden"); $("s3").classList.remove("hidden");
@@ -546,6 +548,7 @@ function renderReport(r) {
 
   h += `<div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h2>${esc(r.headline)}</h2><p>${esc(r.answer)}</p>${r.how_sure ? `<p class="sure">${esc(r.how_sure)}</p>` : ""}</div></div>`;
 
+  if (r.prep && r.prep.length) h += `<div class="adj">🧹 Tidied before analysis: ${r.prep.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>`;
   if (r.adjusted_for && r.adjusted_for.length) h += `<div class="adj">⚖️ Compared people alike on: ${r.adjusted_for.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>`;
 
   if (ok) {

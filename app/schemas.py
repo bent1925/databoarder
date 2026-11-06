@@ -209,6 +209,7 @@ class Report(BaseModel):
     # Mode-specific extras
     mode: Mode = "quick"
     caveats: list[str] = []            # quick: listed at the end
+    prep: list[str] = []               # data-preparation steps applied before analysis (also in the script)
     review_items: list[str] = []       # right_answer: things to resolve before relying on it
     robustness: list[Robustness] = []  # right_answer: independent cross-checks
     robust_summary: str = ""
