@@ -38,7 +38,7 @@ def main() -> int:
         got = res.spec.model_dump()
         wrong = {k: (v, got.get(k)) for k, v in want.items() if got.get(k) != v}
         bad += bool(wrong) or res.source != "llm"
-        print(("PASS" if not wrong and res.source == "llm" else "FAIL"), f, "|", q, "|", wrong or res.source)
+        print(("PASS" if not wrong and res.source == "llm" else "FAIL"), f, "|", q, "|", wrong or f"used {res.source}; notes: {res.notes}")
     return 1 if bad else 0
 
 
