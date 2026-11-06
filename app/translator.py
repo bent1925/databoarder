@@ -164,11 +164,12 @@ def _llm_spec(question: str, profile: list[dict], design: str | None = None) -> 
             fixed = (f"The person already said how people got the change: \"{DESIGNS[design]['label']}\". "
                      f"Use analysis_type = {DESIGNS[design]['analysis']}.\n\n")
         msg = client.messages.create(
-            model=MODEL, max_tokens=500, tools=[tool],
-            tool_choice={"type": "tool", "name": "fill_order_form"},
+            model=MODEL, max_tokens=800, tools=[tool],
+            # This model does not accept a forced tool_choice, so the prompt asks for the tool and we check for it.
             messages=[{"role": "user", "content": (
                 "A business user asked a question about their data. Translate it into the analysis form. "
-                "Use ONLY the column names and values listed. Do not compute anything.\n\n" + fixed +
+                "Use ONLY the column names and values listed. Do not compute anything. "
+                "Answer by calling the fill_order_form tool, and nothing else.\n\n" + fixed +
                 f"Question: {question}\n\nColumns:\n{json.dumps(profile, indent=1)}")}],
         )
         for block in msg.content:
