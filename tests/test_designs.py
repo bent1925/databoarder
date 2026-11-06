@@ -173,3 +173,18 @@ def test_poor_overlap_is_said_up_front():
                              covariates=["age", "educ", "black", "hisp", "marr", "nodegree", "re74", "re75"])
     assert "truly alike" in analyze(df, spec).how_sure
     assert "truly alike" not in analyze(LOY, obs_spec()).how_sure
+
+
+@pytest.mark.parametrize("sample,default", [("checkout_test", "random"), ("signup_page_change", "one_date"),
+                                            ("regional_rollout", "one_date_comparison"), ("loyalty_program", "chose")])
+def test_design_default_per_sample(sample, default):
+    assert design_options(pd.read_csv(f"sample_data/{sample}.csv"))["default"] == default
+
+
+def test_offline_translator_passes_the_eval_cases(monkeypatch):
+    """The keyword fallback must also get the eval questions right (the real-model run is evals/translator_cases.py)."""
+    from evals.translator_cases import CASES
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    for f, design, q, want in CASES:
+        got = interpret(q, pd.read_csv(f"sample_data/{f}.csv"), design).spec.model_dump()
+        assert {k: got.get(k) for k in want} == want, q

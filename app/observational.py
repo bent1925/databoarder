@@ -239,6 +239,7 @@ def analyze(df: pd.DataFrame, spec: ObservationalSpec, csv_name: str = "your_fil
                             message=f"They started furthest apart on '{worst}'. Adjusted for it."))
     else:
         checks.append(Check(name="Groups differ", status="pass", message="Already alike on the compared columns."))
+    extreme = None
     if ps is None:
         checks.append(Check(name="Comparable people", status="info", message="Couldn't measure overlap."))
     else:
@@ -255,7 +256,7 @@ def analyze(df: pd.DataFrame, spec: ObservationalSpec, csv_name: str = "your_fil
     unit_pts = kind == "rate"
     label = f"{humanize(spec.outcome_col)} rate" if unit_pts else f"average {humanize(spec.outcome_col)}"
 
-    rep = _assemble(spec, covs, e, ev_pt, ev_ci, n_c, n_t, kind, label, unit_pts, checks, sub)
+    rep = _assemble(spec, covs, e, ev_pt, ev_ci, n_c, n_t, kind, label, unit_pts, checks, sub, extreme)
     rep = _apply_mode(rep, sub, spec, covs, kind_raw, e, t_arr, ps, unit_pts, mode)
     rep = attach_method_info_obs(rep, mode, checks, covs)
 
@@ -280,7 +281,7 @@ def _fmt(unit_pts: bool):
     return d, ds, val
 
 
-def _assemble(spec, covs, e, ev_pt, ev_ci, n_c, n_t, kind, label, unit_pts, checks, sub) -> Report:
+def _assemble(spec, covs, e, ev_pt, ev_ci, n_c, n_t, kind, label, unit_pts, checks, sub, extreme=None) -> Report:
     diff, lo, hi, p_value = e["diff"], e["lo"], e["hi"], e["p"]
     clear = (lo > 0 or hi < 0) and p_value < ALPHA
     d, ds, val = _fmt(unit_pts)
@@ -307,8 +308,7 @@ def _assemble(spec, covs, e, ev_pt, ev_ci, n_c, n_t, kind, label, unit_pts, chec
         answer = f"{named}. " + ("Leaning that way, but not conclusive." if p_value < 0.2 else "Too close to call.")
         how_sure = (f"Likely range: {ds(lo)} to {ds(hi)}. This only spots gaps of {d(mde)} or more. "
                     f"Not proof of no effect. {cols_txt}")
-    poor_overlap = any(c.name == "Comparable people" and c.status == "warn" and c.message.split('%')[0].isdigit()
-                       and int(c.message.split('%')[0]) > 50 for c in checks)
+    poor_overlap = extreme is not None and extreme > 0.5
     if poor_overlap:
         how_sure = ("Few people in the two groups are truly alike, so treat this as a rough guide only. "
                     "The exact number depends heavily on the method used. ") + how_sure

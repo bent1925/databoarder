@@ -219,9 +219,15 @@ def _outcome_choice(df: pd.DataFrame, question: str, exclude: tuple = ()) -> str
     n = len(df)
     numeric = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and c not in exclude
                and not (c.lower().endswith("id") or df[c].nunique() == n)]
-    named = [c for c in numeric if c.lower() in q or humanize(c).lower() in q]
-    hinted = [c for c in numeric if OUTCOME_HINTS.search(c)]
-    return (named or hinted or numeric or [df.columns[-1]])[0]
+    stems = {w[:5] for w in re.findall(r"[a-z]{4,}", q)}
+
+    def score(c: str) -> tuple:
+        words = [w for w in re.findall(r"[a-z]{4,}", c.lower())]
+        hits = sum(w[:5] in stems for w in words)
+        named = c.lower() in q or humanize(c).lower() in q
+        return (named, hits, bool(POST_HINTS.search(c)), bool(OUTCOME_HINTS.search(c)))
+    best = sorted(numeric, key=score, reverse=True)
+    return (best or [df.columns[-1]])[0]
 
 
 def _ab_heuristic(question: str, df: pd.DataFrame, analysis: str = "ab_test", assignment: str = "chose") -> dict:
@@ -297,6 +303,9 @@ def _pick_heuristic(question: str, df: pd.DataFrame) -> dict:
 
 # ------------------------------------------------------------------ how people got it
 
+STRICT_AB_NAME = re.compile(r"variant|experiment|\bab\b|a_b|bucket|cell|test_?group|\barm\b|assign", re.I)
+
+
 def design_options(df: pd.DataFrame) -> dict:
     """Which 'how did people get it?' answers the file can support, and the likeliest one."""
     group, dcols = _group_choice(df), date_columns(df)
@@ -307,7 +316,14 @@ def design_options(df: pd.DataFrame) -> dict:
            "one_date_comparison": need_group if not group else need_date}
     default = None
     if group and dcols:
-        default = "random" if _has_ab_structure(df, group) and not SELF_HINTS.search(group) else "one_date"
+        if SELF_HINTS.search(group):
+            default = "chose"
+        elif STRICT_AB_NAME.search(group):
+            default = "random"           # named like an experiment arm
+        elif any(CONTROL_HINTS.search(str(v)) for v in df[group].dropna().unique()[:10]):
+            default = "one_date_comparison"   # a control/holdout level plus dates: usually a staged rollout
+        else:
+            default = "one_date"         # the column is probably just a segment (device, region)
     elif dcols:
         default = "one_date"
     elif group:
