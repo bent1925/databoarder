@@ -137,3 +137,28 @@ def test_api_design_flow():
     assert r["analysis"] == "observational" and r["design"] == "chose"
     q = c.get("/api/suggestions", params=dict(dataset_id=ds, mode="quick", design="chose")).json()["questions"]
     assert q
+
+
+# ------------------------------------------- LaLonde benchmark (known randomized answer ~ +$1,794)
+
+def test_a_copy_of_the_group_column_is_never_offered_for_comparing_people():
+    d = LOY.copy()
+    d["joined_copy"] = (d.joined_program == "yes").astype(int)
+    assert "joined_copy" not in {c["name"] for c in covariate_candidates(d, obs_spec())}
+
+
+def test_lalonde_observational_is_honest_about_poor_overlap():
+    import os
+    path = "sample_data/lalonde_cps.csv"
+    if not os.path.exists(path):
+        pytest.skip("run tools/make_lalonde_sample.py (needs causaldata)")
+    df = pd.read_csv(path)
+    spec = ObservationalSpec(group_col="trained", control="no", treatment="yes", outcome_col="re78")
+    assert not any(c["name"] == "trained" for c in covariate_candidates(df, spec))
+    rep = analyze(df, spec.model_copy(update={"covariates": ["age", "educ", "black", "hisp", "marr", "nodegree", "re74", "re75"]}),
+                  mode="right_answer")
+    raw = df[df.trained == "yes"].re78.mean() - df[df.trained == "no"].re78.mean()
+    assert raw < -5000                                          # naive comparison says training HURT earnings
+    assert rep.effect["ci_low"] <= 1794 <= rep.effect["ci_high"]   # adjusted range reaches the randomized answer
+    assert rep.verdict != "clear_difference" or rep.effect["diff"] > 0   # never a confident wrong-signed claim
+    assert rep.review_items                                       # and it warns: overlap is poor / checks disagree

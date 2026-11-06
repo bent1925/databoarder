@@ -51,6 +51,21 @@ POST_HINTS = re.compile(r"next|after|post|future|follow|\d+\s*d$|_\d+d|\d+_?days
                         r"|outcome|result|revenue", re.I)
 
 
+def _copies_group(col: pd.Series, is_treated: pd.Series) -> bool:
+    """Does this column just restate who is in which group (e.g. a 0/1 copy of the group column)?"""
+    ok = col.notna()
+    col, t = col[ok], is_treated[ok].astype(float)
+    if len(col) < 10:
+        return False
+    if col.nunique() <= 20:
+        pure = t.groupby(col).transform(lambda v: max(v.mean(), 1 - v.mean()))
+        return bool(pure.mean() >= 0.99)
+    if pd.api.types.is_numeric_dtype(col):
+        r = np.corrcoef(col.astype(float), t)[0, 1]
+        return bool(np.isfinite(r) and abs(r) >= 0.98)
+    return False
+
+
 def covariate_candidates(df: pd.DataFrame, spec) -> list[dict]:
     """Columns that could be used to compare people, and whether we'd tick them by default."""
     g = df[spec.group_col].astype(str)
@@ -64,6 +79,8 @@ def covariate_candidates(df: pd.DataFrame, spec) -> list[dict]:
             continue
         if not (pd.api.types.is_numeric_dtype(s) or s.nunique(dropna=True) <= MAX_COV_LEVELS):
             continue
+        if _copies_group(s, sub[spec.group_col].astype(str) == spec.treatment):
+            continue                    # same information as the group column: would hide the very gap we measure
         post = bool(POST_HINTS.search(col))
         out.append({"name": col, "checked": not post, "note": "Might be measured after they chose" if post else ""})
     return out
