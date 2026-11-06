@@ -44,11 +44,9 @@ def readback(df: pd.DataFrame, spec: ABTestSpec) -> str:
     g = df[spec.group_col].astype(str)
     n_c, n_t = int((g == spec.control).sum()), int((g == spec.treatment).sum())
     kind = detect_outcome_kind(df[spec.outcome_col])
-    measure = (f"the share of rows where '{spec.outcome_col}' is 1 (a rate)" if kind == "binary"
-               else f"the average of '{spec.outcome_col}'")
-    return (f"You want to know whether '{spec.treatment}' ({n_t:,} rows) did better or worse than "
-            f"'{spec.control}' ({n_c:,} rows), measured by {measure}. "
-            f"Groups come from the column '{spec.group_col}'.")
+    measure = f"yes/no rate of '{spec.outcome_col}'" if kind == "binary" else f"average '{spec.outcome_col}'"
+    return (f"Is '{spec.treatment}' different from '{spec.control}'? "
+            f"Measured by {measure} · {n_t:,} vs {n_c:,} rows.")
 
 
 # ----------------------------------------------------------------------------- LLM
@@ -131,17 +129,17 @@ def interpret(question: str, df: pd.DataFrame) -> Interpretation:
             cand = ABTestSpec(**raw)
             problems = validate_spec_against_data(df, cand)
             if problems:
-                notes.append("The AI's first reading didn't match your data, so a simpler guess was used: " + " ".join(problems))
+                notes.append("The AI misread your data, so columns were guessed: " + " ".join(problems))
             else:
                 spec, source = cand, "llm"
         except Exception:
-            notes.append("The AI's answer wasn't in the expected form, so a simpler guess was used.")
+            notes.append("The AI answered oddly, so columns were guessed.")
     elif raw and "_error" in raw:
-        notes.append(f"The AI service was unreachable ({raw['_error']}); used a simpler guess instead.")
+        notes.append(f"AI unreachable ({raw['_error']}), so columns were guessed.")
     if spec is None:
         spec = ABTestSpec(**_heuristic_spec(question, df))
         if not os.environ.get("ANTHROPIC_API_KEY"):
-            notes.append("No AI key is set, so columns were guessed from their names. Please check the choices below.")
+            notes.append("No AI key: columns were guessed from names. Please check.")
     return Interpretation(spec=spec, readback=readback(df, spec), source=source, notes=notes)
 
 
@@ -167,8 +165,8 @@ def suggest_questions(df: pd.DataFrame, mode: str, limit: int = 4) -> list[dict]
         spec = ABTestSpec(group_col=group, control=control, treatment=treatment, outcome_col=o)
         if validate_spec_against_data(df, spec):
             continue
-        what = f"the {humanize(o)} rate" if detect_outcome_kind(df[o]) == "binary" else f"average {humanize(o)}"
+        what = f"{humanize(o)} rate" if detect_outcome_kind(df[o]) == "binary" else f"average {humanize(o)}"
         tail = ", and for whom?" if mode == "research" else "?"
-        out.append({"text": f"Did '{treatment}' change {what} compared with '{control}'{tail}",
+        out.append({"text": f"Did '{treatment}' change {what} vs '{control}'{tail}",
                     "spec": spec.model_dump()})
     return out

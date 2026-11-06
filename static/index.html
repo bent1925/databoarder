@@ -3,139 +3,146 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboarder</title>
+<title>Databoarder</title>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --ink: #14161a; --muted: #5d6573; --line: #e4e7ec;
-    --accent: #4f46e5; --accent-ink: #ffffff; --accent-soft: #eef0ff;
-    --good: #0f7b4b; --good-soft: #e6f6ee; --warn: #9a5b00; --warn-soft: #fff3de;
-    --bad: #b42318; --bad-soft: #fde8e6; --neutral: #475467; --neutral-soft: #eef0f3;
-    --c-control: #8a94a6; --c-treat: #4f46e5; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.04);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1013; --card: #171a1f; --ink: #eef0f3; --muted: #9aa3b2; --line: #272b33;
-      --accent: #818cf8; --accent-ink: #0e1013; --accent-soft: #1f2240;
-      --good: #4ade80; --good-soft: #10261b; --warn: #fbbf24; --warn-soft: #2b2110;
-      --bad: #f87171; --bad-soft: #2d1513; --neutral: #b0b8c6; --neutral-soft: #20242b;
-      --c-control: #7b8496; --c-treat: #818cf8; --shadow: none;
-    }
+    --ink: #2d2a4a; --muted: #6b678f; --bg: #fff7e6; --card: #ffffff; --line: #e8e2f4;
+    --purple: #7c5cff; --purple-soft: #ece7ff;
+    --yellow: #ffd23f; --yellow-soft: #fff3c4;
+    --green: #17c28b; --green-soft: #d6f7ea;
+    --pink: #ff5c9d; --pink-soft: #ffe1ee;
+    --blue: #3ec1ff; --blue-soft: #d9f2ff;
+    --orange: #ff9f43; --orange-soft: #ffe8d0;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 36px 20px 80px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
-  h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
-  h1 span { color: var(--accent); }
-  .sub { color: var(--muted); font-size: 14px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px;
-    box-shadow: var(--shadow); margin-bottom: 18px; }
-  .step-title { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; margin: 0 0 14px; }
-  .num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
-    display: inline-grid; place-items: center; font-size: 13px; font-weight: 700; flex: none; }
-  .done .num { background: var(--good-soft); color: var(--good); }
-  .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 30px; text-align: center; color: var(--muted);
-    cursor: pointer; transition: .15s; }
-  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
-  .drop b { color: var(--ink); }
-  .linkish { color: var(--accent); cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; background: var(--neutral-soft); border-radius: 999px;
-    padding: 5px 12px; font-size: 14px; margin-right: 8px; }
-  textarea { width: 100%; min-height: 84px; resize: vertical; border: 1px solid var(--line); border-radius: 12px;
-    padding: 12px 14px; font: inherit; background: var(--card); color: var(--ink); }
-  textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .btn { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px; padding: 11px 20px;
-    font: inherit; font-weight: 600; cursor: pointer; }
-  .btn:hover { filter: brightness(1.08); }
-  .btn:disabled { opacity: .5; cursor: default; }
-  .btn.ghost { background: transparent; color: var(--accent); padding: 11px 8px; }
-  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
-  .readback { font-size: 17px; line-height: 1.5; background: var(--accent-soft); border-radius: 12px; padding: 14px 16px; }
-  .note { font-size: 13.5px; color: var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 8px 12px; margin-top: 10px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 14px; }
-  label { font-size: 12.5px; color: var(--muted); display: block; margin-bottom: 4px; }
-  select { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card);
-    color: var(--ink); font: inherit; font-size: 15px; }
+  body {
+    margin: 0; color: var(--ink); font-size: 16px; line-height: 1.5; font-weight: 500;
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Quicksand", "Avenir Next", "Trebuchet MS", system-ui, sans-serif;
+    background: var(--bg) radial-gradient(circle at 1px 1px, rgba(124,92,255,.16) 1.6px, transparent 0) 0 0 / 24px 24px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 30px 18px 90px; }
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+  h1 { font-size: 30px; margin: 0; font-weight: 900; letter-spacing: -.02em; }
+  h1 .b { color: var(--purple); }
+  .tagline { color: var(--muted); font-weight: 700; }
+  .card { background: var(--card); border: 2.5px solid var(--ink); border-radius: 24px; padding: 20px 22px;
+    box-shadow: 0 5px 0 var(--ink); margin-bottom: 22px; }
+  .title { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 19px; font-weight: 900; }
+  .ic { width: 42px; height: 42px; border-radius: 14px; display: inline-grid; place-items: center; font-size: 23px;
+    border: 2.5px solid var(--ink); flex: none; }
+  .ic.y { background: var(--yellow); } .ic.p { background: var(--purple-soft); } .ic.g { background: var(--green-soft); }
+  .ic.b { background: var(--blue-soft); } .ic.k { background: var(--pink-soft); } .ic.o { background: var(--orange-soft); }
   .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .linkish { color: var(--purple); font-weight: 800; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; font-weight: 800; }
+  .linkish:hover { text-decoration: underline; }
 
-  /* mode cards */
-  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  /* buttons */
+  .btn { background: var(--purple); color: #fff; border: 2.5px solid var(--ink); border-radius: 16px; padding: 11px 22px;
+    font: inherit; font-weight: 900; font-size: 16px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); transition: transform .08s, box-shadow .08s; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 5px 0 var(--ink); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  .btn:disabled { opacity: .6; cursor: default; transform: none; }
+  .btn.soft { background: var(--yellow); color: var(--ink); }
+  .row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+
+  /* drop zone */
+  .drop { border: 3px dashed var(--purple); background: var(--purple-soft); border-radius: 20px; padding: 26px; text-align: center;
+    cursor: pointer; transition: .15s; font-weight: 800; }
+  .drop:hover, .drop.over { background: var(--yellow-soft); border-color: var(--ink); transform: rotate(-.4deg); }
+  .drop .big { font-size: 42px; line-height: 1.1; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--yellow-soft); border: 2px solid var(--ink);
+    border-radius: 999px; padding: 3px 12px; font-size: 14px; font-weight: 800; margin: 0 8px 6px 0; }
+
+  /* modes */
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   @media (max-width: 700px) { .modes { grid-template-columns: 1fr; } }
-  .mode { text-align: left; border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 15px; cursor: pointer;
-    background: var(--card); color: var(--ink); font: inherit; transition: .12s; }
-  .mode:hover { border-color: var(--accent); }
-  .mode.on { border-color: var(--accent); background: var(--accent-soft); }
-  .mode .mt { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .mode b { font-size: 15px; }
-  .mode .pill { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-  .mode.on .pill { color: var(--accent); }
-  .mode span.d { font-size: 13.5px; color: var(--muted); line-height: 1.4; display: block; }
+  .mode { text-align: center; border: 2.5px solid var(--ink); border-radius: 20px; padding: 16px 12px 14px; cursor: pointer;
+    background: #fff; color: var(--ink); font: inherit; transition: transform .1s, box-shadow .1s; box-shadow: 0 0 0 var(--ink); }
+  .mode:hover { transform: translateY(-2px); }
+  .mode .e { font-size: 38px; line-height: 1.1; display: block; }
+  .mode b { font-size: 17px; font-weight: 900; display: block; margin-top: 4px; }
+  .mode .d { font-size: 14px; color: var(--muted); font-weight: 700; }
+  .mode.on { box-shadow: 0 5px 0 var(--ink); transform: translateY(-3px); }
+  .mode[data-m=quick].on { background: var(--yellow-soft); } .mode[data-m=right_answer].on { background: var(--green-soft); }
+  .mode[data-m=research].on { background: var(--blue-soft); }
 
-  /* question list */
-  .qopt { display: flex; gap: 12px; align-items: flex-start; padding: 13px 15px; border: 1.5px solid var(--line);
-    border-radius: 12px; margin-bottom: 8px; cursor: pointer; background: var(--card); transition: .12s; }
-  .qopt:hover { border-color: var(--accent); }
-  .qopt.on { border-color: var(--accent); background: var(--accent-soft); }
-  .qopt input { margin-top: 5px; accent-color: var(--accent); }
-  .qopt .qt { font-size: 15.5px; }
-  .qopt .qs { font-size: 12.5px; color: var(--muted); }
+  /* questions */
+  .qopt { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 2.5px solid var(--line); border-radius: 18px;
+    margin-bottom: 10px; cursor: pointer; background: #fff; transition: .1s; font-weight: 700; }
+  .qopt:hover { border-color: var(--purple); }
+  .qopt.on { border-color: var(--ink); background: var(--purple-soft); box-shadow: 0 3px 0 var(--ink); }
+  .qopt input { accent-color: var(--purple); width: 18px; height: 18px; flex: none; }
+  .qopt .em { font-size: 22px; }
+  .qopt small { display: block; color: var(--muted); font-weight: 700; font-size: 12.5px; }
+  textarea { width: 100%; min-height: 80px; resize: vertical; border: 2.5px solid var(--ink); border-radius: 16px; padding: 12px 14px;
+    font: inherit; font-weight: 600; background: #fff; color: var(--ink); margin-top: 2px; }
+  textarea:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 1px; }
+  .readback { font-size: 18px; font-weight: 800; background: var(--purple-soft); border: 2.5px solid var(--ink); border-radius: 18px; padding: 14px 16px; }
+  .note { font-size: 14px; font-weight: 700; background: var(--orange-soft); border: 2px solid var(--ink); border-radius: 14px; padding: 7px 12px; margin-top: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 14px; }
+  label.f { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; font-weight: 800; }
+  select { width: 100%; padding: 9px 10px; border-radius: 12px; border: 2.5px solid var(--ink); background: #fff; color: var(--ink); font: inherit; font-weight: 700; }
+  .err { color: #c0245f; font-weight: 800; margin-top: 10px; }
 
   /* report */
-  .reportbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-  .seg { display: inline-flex; background: var(--neutral-soft); border-radius: 999px; padding: 3px; }
-  .seg button { border: 0; background: none; font: inherit; font-size: 13px; color: var(--muted); padding: 5px 12px;
-    border-radius: 999px; cursor: pointer; }
-  .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
-  .assumed { font-size: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; color: var(--muted); }
-  .assumed b { color: var(--ink); }
-  .verdict { border-radius: 16px; padding: 24px; margin-bottom: 18px; border: 1px solid transparent; }
-  .verdict.clear_difference { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 25%, transparent); }
-  .verdict.no_clear_difference { background: var(--neutral-soft); border-color: var(--line); }
-  .verdict.blocked { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 25%, transparent); }
-  .tag { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-  .clear_difference .tag { color: var(--good); } .no_clear_difference .tag { color: var(--neutral); } .blocked .tag { color: var(--bad); }
-  .verdict h2 { margin: 6px 0 10px; font-size: 26px; letter-spacing: -.02em; line-height: 1.2; }
-  .verdict p { margin: 8px 0; }
+  .reportbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .seg { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { border: 2.5px solid var(--ink); background: #fff; font: inherit; font-weight: 800; font-size: 14px; color: var(--ink);
+    padding: 5px 14px; border-radius: 999px; cursor: pointer; }
+  .seg button.on { background: var(--yellow); box-shadow: 0 3px 0 var(--ink); transform: translateY(-1px); }
+  .assumed { font-size: 14px; font-weight: 700; background: #fff; border: 2.5px dashed var(--ink); border-radius: 16px; padding: 9px 14px; margin-bottom: 18px; }
+  .verdict { display: flex; gap: 18px; align-items: center; border: 2.5px solid var(--ink); border-radius: 24px; padding: 22px;
+    margin-bottom: 22px; box-shadow: 0 5px 0 var(--ink); }
+  .verdict .face { font-size: 60px; line-height: 1; flex: none; }
+  .verdict.clear_difference { background: var(--green-soft); } .verdict.no_clear_difference { background: var(--yellow-soft); }
+  .verdict.blocked { background: var(--pink-soft); }
+  .verdict h2 { margin: 0 0 6px; font-size: 26px; line-height: 1.15; font-weight: 900; letter-spacing: -.01em; }
+  .verdict p { margin: 4px 0; font-weight: 700; }
   .verdict .sure { color: var(--muted); }
-  .banner { border-radius: 14px; padding: 14px 18px; margin-bottom: 14px; font-size: 15px; }
-  .banner.warn { background: var(--warn-soft); color: var(--warn); }
-  .banner.good { background: var(--good-soft); color: var(--good); }
-  .banner b { display: block; margin-bottom: 4px; }
-  .banner ul { margin: 4px 0 0; padding-left: 20px; }
-  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 560px) { .verdict { flex-direction: column; text-align: center; } }
+  .banner { border: 2.5px solid var(--ink); border-radius: 20px; padding: 12px 18px; margin-bottom: 18px; font-weight: 800; }
+  .banner.warn { background: var(--orange-soft); } .banner.good { background: var(--green-soft); }
+  .banner ul { margin: 4px 0 0; padding-left: 20px; font-weight: 700; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   @media (max-width: 700px) { .charts { grid-template-columns: 1fr; } }
-  .chart-title { font-size: 13px; font-weight: 650; margin: 0 0 6px; }
-  .chart-cap { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
-  svg text { fill: var(--muted); font: 12px -apple-system, "Inter", sans-serif; }
-  svg .lbl { fill: var(--ink); font-weight: 600; }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
-  .tab { background: none; border: 0; padding: 10px 14px; font: inherit; color: var(--muted); cursor: pointer;
-    border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  .tab.on { color: var(--ink); border-color: var(--accent); font-weight: 600; }
-  .check { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
-  .check:last-child { border: 0; }
-  .dot { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; margin-top: 2px; }
-  .dot.pass { background: var(--good-soft); color: var(--good); } .dot.warn { background: var(--warn-soft); color: var(--warn); }
-  .dot.fail { background: var(--bad-soft); color: var(--bad); } .dot.info { background: var(--neutral-soft); color: var(--neutral); }
-  .check b { display: block; font-size: 14px; }
-  .check small { display: block; color: var(--muted); font-size: 13px; }
-  .box { background: var(--neutral-soft); border-radius: 12px; padding: 14px 16px; margin: 16px 0 0; font-size: 15px; }
-  .box b { display: block; margin-bottom: 4px; }
-  .caveats { background: var(--warn-soft); border-color: transparent; }
-  .caveats h3 { margin: 0 0 8px; font-size: 15px; color: var(--warn); }
-  ul.plain { margin: 6px 0 0; padding-left: 20px; } ul.plain li { margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
-  tr.flag td { background: var(--good-soft); }
+  .ct { font-weight: 900; margin: 0 0 4px; font-size: 15px; }
+  .cap { font-size: 13px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+  svg text { fill: var(--muted); font: 700 12px ui-rounded, "Nunito", system-ui, sans-serif; }
+  svg .lbl { fill: var(--ink); font-weight: 900; font-size: 13px; }
+
+  /* tabs */
+  .tabbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab { border: 2.5px solid var(--ink); background: #fff; font: inherit; font-weight: 800; font-size: 14px; color: var(--ink);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .tab:hover { background: var(--purple-soft); }
+  .tab.on { background: var(--yellow); box-shadow: 0 3px 0 var(--ink); transform: translateY(-1px); }
+  .tabbar.sub .tab.on { background: var(--blue-soft); }
+  .item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 2px dashed var(--line); font-weight: 700; align-items: flex-start; }
+  .item:last-child { border: 0; }
+  .item .s { font-size: 18px; flex: none; width: 26px; text-align: center; }
+  .item b { display: block; font-weight: 900; font-size: 14px; }
+  .item small { display: block; color: var(--muted); font-weight: 700; font-size: 13px; }
+  .box { background: var(--purple-soft); border: 2.5px solid var(--ink); border-radius: 18px; padding: 12px 16px; margin: 14px 0 0; font-weight: 700; }
+  .box b { display: block; font-weight: 900; margin-bottom: 2px; }
+  .box ul { margin: 4px 0 0; padding-left: 20px; }
+  .caveats { background: var(--orange-soft); }
+  .caveats ul { margin: 4px 0 0; padding-left: 22px; font-weight: 700; }
+  .legend { font-size: 13px; color: var(--muted); font-weight: 800; margin-bottom: 8px; }
+  .mblock { margin-bottom: 14px; }
+  .mname { font-weight: 900; font-size: 15px; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-weight: 600; }
+  th, td { text-align: left; padding: 8px 8px; border-bottom: 2px dashed var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 900; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+  td.v { font-weight: 900; white-space: nowrap; }
+  tr.flag td { background: var(--green-soft); }
   code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
-  code { background: var(--neutral-soft); padding: 2px 6px; border-radius: 6px; word-break: break-word; }
-  pre { background: var(--neutral-soft); padding: 14px; border-radius: 12px; overflow: auto; margin: 10px 0 0; }
-  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent;
-    border-radius: 50%; animation: s .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  code { background: var(--purple-soft); padding: 1px 6px; border-radius: 6px; word-break: break-word; }
+  pre { background: #2d2a4a; color: #f3efff; padding: 14px; border-radius: 16px; overflow: auto; margin: 10px 0 0; max-height: 420px; }
+  .fp { font-size: 13px; font-weight: 800; background: var(--yellow-soft); border: 2px solid var(--ink); border-radius: 14px; padding: 8px 12px; margin-bottom: 12px; word-break: break-word; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 3px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: s .7s linear infinite; vertical-align: -2px; margin-right: 8px; }
   @keyframes s { to { transform: rotate(360deg); } }
-  .err { color: var(--bad); font-size: 14px; margin-top: 10px; }
   table.preview td, table.preview th { white-space: nowrap; font-size: 13px; }
   .scroll { overflow-x: auto; }
 </style>
@@ -143,53 +150,48 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Data<span>boarder</span></h1>
-    <div class="sub">Ask a business question. Get an answer you can trust.</div>
+    <h1>🎈 Data<span class="b">boarder</span></h1>
+    <div class="tagline">Ask. Get a straight answer.</div>
   </header>
 
-  <!-- 1 Data -->
   <section class="card" id="s1">
-    <p class="step-title"><span class="num">1</span> Add your data</p>
+    <p class="title"><span class="ic y">📂</span> Your data</p>
     <div id="drop" class="drop">
-      <div><b>Drop a CSV file here</b> or <button class="linkish" id="pick">browse</button></div>
-      <div style="font-size:13px;margin-top:6px">One row per person or event. Needs a column saying which version someone saw.</div>
+      <div class="big">📄</div>
+      <div>Drop a CSV here, or <button class="linkish" id="pick">browse</button></div>
       <input type="file" id="file" accept=".csv,text/csv" class="hidden">
     </div>
     <div id="fileinfo" class="hidden"></div>
-    <div class="row" id="trysample"><span class="sub">No file handy?</span>
-      <button class="linkish" id="sample">Use the sample checkout test</button></div>
+    <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🍪 Try a sample</button></div>
     <div id="err1" class="err"></div>
   </section>
 
-  <!-- 2 Kind of work -->
   <section class="card hidden" id="s2">
-    <p class="step-title"><span class="num">2</span> What kind of work is this?</p>
+    <p class="title"><span class="ic g">🎚️</span> How careful?</p>
     <div class="modes" id="modes"></div>
   </section>
 
-  <!-- 3 Question -->
   <section class="card hidden" id="s3">
-    <p class="step-title"><span class="num">3</span> What do you want to know?</p>
+    <p class="title"><span class="ic b">💬</span> Your question</p>
     <div id="qlist"></div>
-    <textarea id="qother" class="hidden" placeholder="Type your question in your own words, e.g. Did the new checkout page increase purchases in the UK?"></textarea>
-    <div class="row"><button class="btn" id="go">Continue</button></div>
+    <textarea id="qother" class="hidden" placeholder="Type your question…"></textarea>
+    <div class="row"><button class="btn" id="go">Go</button></div>
     <div id="err3" class="err"></div>
   </section>
 
-  <!-- 4 Confirm (only when needed) -->
   <section class="card hidden" id="s4">
-    <p class="step-title"><span class="num">4</span> Is this what you meant?</p>
+    <p class="title"><span class="ic k">👀</span> Is this right?</p>
     <div class="readback" id="readback"></div>
     <div id="notes"></div>
     <div class="row">
-      <button class="btn" id="runbtn">Yes, run it</button>
-      <button class="btn ghost" id="adjust">Not quite — adjust</button>
+      <button class="btn" id="runbtn">✅ Yes, run it</button>
+      <button class="linkish" id="adjust">✏️ Change</button>
     </div>
     <div class="grid hidden" id="adjustgrid">
-      <div><label>Column that says which version</label><select id="f_group"></select></div>
-      <div><label>Baseline version (control)</label><select id="f_control"></select></div>
-      <div><label>New version (treatment)</label><select id="f_treat"></select></div>
-      <div><label>What to measure</label><select id="f_outcome"></select></div>
+      <div><label class="f">Group column</label><select id="f_group"></select></div>
+      <div><label class="f">Baseline</label><select id="f_control"></select></div>
+      <div><label class="f">New version</label><select id="f_treat"></select></div>
+      <div><label class="f">Measure</label><select id="f_outcome"></select></div>
     </div>
     <div id="err4" class="err"></div>
   </section>
@@ -201,10 +203,13 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const MODES = {
-  quick: { title: "Quick and dirty", pill: "Fast", short: "Quick", desc: "A fast, directional answer. Caveats are listed at the end." },
-  right_answer: { title: "Need the right answer", pill: "Strict", short: "Right answer", desc: "Decision-grade. Cross-checked with other methods, and anything shaky is flagged up front." },
-  research: { title: "Research", pill: "Exploring", short: "Research", desc: "Digging around. Also scans subgroups, adjusted so we don't chase noise. Ideas to test, not conclusions." },
+  quick: { e: "⚡", title: "Quick and dirty", short: "Quick", desc: "Fast. Caveats at the end." },
+  right_answer: { e: "🎯", title: "Need the right answer", short: "Right answer", desc: "Strict. Cross-checked." },
+  research: { e: "🔬", title: "Research", short: "Research", desc: "Explore. Find ideas." },
 };
+const STATUS = { pass: "✅", warn: "⚠️", fail: "❌", info: "💡" };
+const ASSUME = { ok: "✅", warn: "⚠️", manual: "🙋" };
+const CHECK_EMOJI = { "Sample size": "👥", "Missing results": "🕳️", "Missing balance": "⚖️", "Repeat people": "🔂", "Group balance": "⚖️", "Extreme values": "🏔️", "Question fits data": "🧩" };
 const state = { ds: null, mode: "quick", questions: [], choice: 0, spec: null, readback: "", assumed: false };
 
 async function api(path, opts) {
@@ -216,7 +221,7 @@ async function api(path, opts) {
 const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 function busy(btn, on, text) { btn.disabled = on; if (on) { btn.dataset.t = btn.dataset.t || btn.textContent; btn.innerHTML = `<span class="spin"></span>${text}`; } else { btn.textContent = btn.dataset.t || btn.textContent; delete btn.dataset.t; } }
 
-/* ---------- 1 upload ---------- */
+/* ---------- 1 data ---------- */
 $("pick").onclick = () => $("file").click();
 $("drop").onclick = (e) => { if (e.target.id !== "pick") $("file").click(); };
 $("file").onchange = (e) => e.target.files[0] && upload(e.target.files[0]);
@@ -232,12 +237,12 @@ async function upload(file) {
   $("err1").textContent = "";
   const fd = new FormData(); fd.append("file", file);
   try { state.ds = await api("/api/upload", { method: "POST", body: fd }); }
-  catch (e) { $("err1").textContent = e.message; return; }
+  catch (e) { $("err1").textContent = "😕 " + e.message; return; }
   const d = state.ds, cols = d.columns.map((c) => c.name);
-  $("drop").classList.add("hidden"); $("trysample").classList.add("hidden"); $("s1").classList.add("done");
+  $("drop").classList.add("hidden"); $("trysample").classList.add("hidden");
   $("fileinfo").classList.remove("hidden");
   $("fileinfo").innerHTML = `<span class="chip">📄 ${esc(d.name)}</span><span class="chip">${d.rows.toLocaleString()} rows</span><span class="chip">${cols.length} columns</span>
-    <button class="linkish" id="togglePrev">Preview</button> · <button class="linkish" id="swap">Use a different file</button>
+    <button class="linkish" id="togglePrev">👀 Peek</button> · <button class="linkish" id="swap">🔄 Other file</button>
     <div id="prev" class="scroll hidden" style="margin-top:12px"><table class="preview"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
     <tbody>${d.preview.map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   $("togglePrev").onclick = () => $("prev").classList.toggle("hidden");
@@ -250,7 +255,7 @@ async function upload(file) {
 function renderModes() {
   $("modes").innerHTML = Object.entries(MODES).map(([k, m]) => `
     <button class="mode ${state.mode === k ? "on" : ""}" data-m="${k}" aria-pressed="${state.mode === k}">
-      <div class="mt"><b>${esc(m.title)}</b><span class="pill">${esc(m.pill)}</span></div><span class="d">${esc(m.desc)}</span></button>`).join("");
+      <span class="e">${m.e}</span><b>${esc(m.title)}</b><span class="d">${esc(m.desc)}</span></button>`).join("");
   $("modes").querySelectorAll(".mode").forEach((b) => (b.onclick = async () => { state.mode = b.dataset.m; renderModes(); await loadQuestions(); }));
 }
 
@@ -262,25 +267,25 @@ async function loadQuestions() {
   renderQuestions();
 }
 function renderQuestions() {
-  const items = state.questions.map((q, i) => ({ id: i, text: q.text, sub: i === 0 ? "Suggested for your data" : "" }));
-  items.push({ id: "other", text: "Other…", sub: "Ask in your own words" });
+  const items = state.questions.map((q, i) => ({ id: i, em: "📈", text: q.text, sub: i === 0 ? "Suggested" : "" }));
+  items.push({ id: "other", em: "✏️", text: "Something else…", sub: "" });
   $("qlist").innerHTML = items.map((it) => `
     <label class="qopt ${state.choice === it.id ? "on" : ""}" data-id="${it.id}">
-      <input type="radio" name="q" ${state.choice === it.id ? "checked" : ""}>
-      <div><div class="qt">${esc(it.text)}</div>${it.sub ? `<div class="qs">${esc(it.sub)}</div>` : ""}</div></label>`).join("");
+      <input type="radio" name="q" ${state.choice === it.id ? "checked" : ""}><span class="em">${it.em}</span>
+      <span>${esc(it.text)}${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</span></label>`).join("");
   $("qlist").querySelectorAll(".qopt").forEach((el) => (el.onclick = () => {
     const id = el.dataset.id; state.choice = id === "other" ? "other" : +id; renderQuestions();
     if (id === "other") $("qother").focus();
   }));
   $("qother").classList.toggle("hidden", state.choice !== "other");
-  $("go").textContent = state.mode === "quick" && state.choice !== "other" ? "Run it" : "Continue";
+  $("go").textContent = state.mode === "quick" && state.choice !== "other" ? "🚀 Run it" : "Go";
 }
 
 $("go").onclick = async () => {
   $("err3").textContent = "";
   const q = state.choice === "other" ? $("qother").value.trim() : "";
-  if (state.choice === "other" && !q) { $("err3").textContent = "Type your question first."; return; }
-  busy($("go"), true, "Working…");
+  if (state.choice === "other" && !q) { $("err3").textContent = "✏️ Type a question first."; return; }
+  busy($("go"), true, "Thinking…");
   try {
     if (state.choice === "other") {
       const interp = await post("/api/ask", { dataset_id: state.ds.dataset_id, question: q });
@@ -292,7 +297,7 @@ $("go").onclick = async () => {
       if (state.mode === "quick") { state.assumed = true; $("s4").classList.add("hidden"); await run(); }
       else { await openConfirm([]); }
     }
-  } catch (e) { $("err3").textContent = e.message; }
+  } catch (e) { $("err3").textContent = "😕 " + e.message; }
   busy($("go"), false);
   renderQuestions();
 };
@@ -305,7 +310,7 @@ async function openConfirm(notes = []) {
   state.assumed = false;
   $("s4").classList.remove("hidden");
   $("readback").textContent = state.readback;
-  $("notes").innerHTML = notes.map((n) => `<div class="note">${esc(n)}</div>`).join("");
+  $("notes").innerHTML = notes.map((n) => `<div class="note">💡 ${esc(n)}</div>`).join("");
   const s = state.spec, cols = state.ds.columns.map((c) => c.name), numeric = state.ds.columns.filter((c) => c.type === "number").map((c) => c.name);
   fillSelect($("f_group"), cols, s.group_col);
   const lv = await levelsFor(s.group_col);
@@ -320,11 +325,10 @@ async function specChanged(groupChanged) {
 }
 $("f_group").onchange = () => specChanged(true);
 ["f_control", "f_treat", "f_outcome"].forEach((id) => ($(id).onchange = () => specChanged(false)));
-$("runbtn").onclick = async () => { $("err4").textContent = ""; busy($("runbtn"), true, "Running the analysis…"); try { await run(); } catch (e) { $("err4").textContent = e.message; } busy($("runbtn"), false); };
+$("runbtn").onclick = async () => { $("err4").textContent = ""; busy($("runbtn"), true, "Crunching…"); try { await run(); } catch (e) { $("err4").textContent = "😕 " + e.message; } busy($("runbtn"), false); };
 
 async function run() {
-  const r = await post("/api/run", { dataset_id: state.ds.dataset_id, spec: state.spec, mode: state.mode });
-  renderReport(r);
+  renderReport(await post("/api/run", { dataset_id: state.ds.dataset_id, spec: state.spec, mode: state.mode }));
 }
 
 /* ---------- charts ---------- */
@@ -335,94 +339,122 @@ function ticks(lo, hi, n = 4) {
   return out;
 }
 function intervalChart(rows, o) {
-  const W = 380, rowH = 54, padL = 96, padR = 16, padT = 8, padB = 30, H = padT + padB + rows.length * rowH;
+  const W = 400, rowH = 56, padL = 122, padR = 16, padT = 8, padB = 30, H = padT + padB + rows.length * rowH;
   let lo = Math.min(...rows.map((r) => r.lo), o.zero ? 0 : Infinity), hi = Math.max(...rows.map((r) => r.hi), o.zero ? 0 : -Infinity);
   const pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
   if (o.floor0 && lo < 0) lo = 0;
   const x = (v) => padL + ((v - lo) / (hi - lo)) * (W - padL - padR);
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(o.aria)}">`;
-  ticks(lo, hi).forEach((t) => { s += `<line x1="${x(t)}" x2="${x(t)}" y1="${padT}" y2="${H - padB}" stroke="var(--line)"/><text x="${x(t)}" y="${H - 10}" text-anchor="middle">${o.fmt(t)}</text>`; });
-  if (o.zero) s += `<line x1="${x(0)}" x2="${x(0)}" y1="${padT}" y2="${H - padB}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+  ticks(lo, hi).forEach((t) => { s += `<line x1="${x(t)}" x2="${x(t)}" y1="${padT}" y2="${H - padB}" stroke="var(--line)" stroke-width="2"/><text x="${x(t)}" y="${H - 10}" text-anchor="middle">${o.fmt(t)}</text>`; });
+  if (o.zero) s += `<line x1="${x(0)}" x2="${x(0)}" y1="${padT}" y2="${H - padB}" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="5 4"/>`;
   rows.forEach((r, i) => {
     const y = padT + i * rowH + rowH / 2;
-    s += `<text class="lbl" x="${padL - 10}" y="${y + 4}" text-anchor="end">${esc(r.label.length > 13 ? r.label.slice(0, 12) + "…" : r.label)}</text>
-      <line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${y}" y2="${y}" stroke="${r.color}" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="${x(r.est)}" cy="${y}" r="6.5" fill="${r.color}" stroke="var(--card)" stroke-width="2"/>
-      <text x="${x(r.est)}" y="${y - 12}" text-anchor="middle" class="lbl">${o.fmt(r.est)}</text>`;
+    s += `<text class="lbl" x="${padL - 10}" y="${y + 4}" text-anchor="end">${esc(r.label.length > 14 ? r.label.slice(0, 13) + "…" : r.label)}</text>
+      <line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${y}" y2="${y}" stroke="${r.color}" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="${x(r.est)}" cy="${y}" r="9" fill="${r.color}" stroke="var(--ink)" stroke-width="2.5"/>
+      <text x="${x(r.est)}" y="${y - 15}" text-anchor="middle" class="lbl">${o.fmt(r.est)}</text>`;
   });
   return s + "</svg>";
+}
+
+/* ---------- tabs ---------- */
+function bindTabs(root) {
+  root.querySelectorAll(".tabbar").forEach((bar) => {
+    const g = bar.dataset.g;
+    bar.querySelectorAll(".tab").forEach((b) => (b.onclick = () => {
+      bar.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
+      root.querySelectorAll(`.panel[data-g="${g}"]`).forEach((p) => p.classList.toggle("hidden", p.dataset.t !== b.dataset.t));
+    }));
+  });
 }
 
 /* ---------- report ---------- */
 function renderReport(r) {
   const root = $("report"); root.classList.remove("hidden");
-  const tag = { clear_difference: "Clear difference", no_clear_difference: "No clear difference", blocked: "Can't answer yet" }[r.verdict];
   const ok = r.verdict !== "blocked";
+  const face = { clear_difference: "🎉", no_clear_difference: "🤷", blocked: "🚧" }[r.verdict];
   const pts = r.effect ? r.effect.unit_pts : true, m = pts ? 100 : 1;
   const num = (v) => (Math.abs(v) >= 100 ? Math.round(Math.abs(v)).toLocaleString() : Math.abs(v).toFixed(2));
   const f1 = (v) => (pts ? v.toFixed(1) + "%" : Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
   const fd = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + (pts ? Math.abs(v).toFixed(1) + " pts" : num(v));
+  const item = (s, title, sub) => `<div class="item"><span class="s">${s}</span><div><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div></div>`;
 
   let h = `<div class="reportbar"><div class="seg" role="group" aria-label="Rerun in another mode">${Object.entries(MODES).map(([k, mo]) =>
-      `<button data-rm="${k}" class="${r.mode === k ? "on" : ""}">${esc(mo.short)}</button>`).join("")}</div>
-    <span class="sub">${esc(MODES[r.mode].title)}</span></div>`;
+      `<button data-rm="${k}" class="${r.mode === k ? "on" : ""}">${mo.e} ${esc(mo.short)}</button>`).join("")}</div></div>`;
 
-  if (state.assumed) h += `<div class="assumed"><b>Here's what I assumed:</b> ${esc(state.readback)} <button class="linkish" id="change">Change</button></div>`;
+  if (state.assumed) h += `<div class="assumed">👀 Assumed: ${esc(state.readback)} <button class="linkish" id="change">✏️ Change</button></div>`;
 
   if (r.mode === "right_answer" && ok) {
     h += r.review_items.length
-      ? `<div class="banner warn"><b>Before you rely on this</b><ul>${r.review_items.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`
-      : `<div class="banner good"><b>Passed strict review</b>All data checks are clean, and ${esc(r.robust_summary.replace(/^Holds up:\s*/, "").replace(/^./, (c) => c.toLowerCase()))}</div>`;
+      ? `<div class="banner warn">⚠️ Check first<ul>${r.review_items.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`
+      : `<div class="banner good">🏅 All checks clean. ${esc(r.robust_summary.replace(/^Holds up:\s*/, "").replace(/^./, (c) => c.toUpperCase()))}</div>`;
   }
 
-  h += `<div class="verdict ${r.verdict}"><div class="tag">${tag}</div><h2>${esc(r.headline)}</h2><p>${esc(r.answer)}</p>${ok ? `<p class="sure">${esc(r.how_sure)}</p>` : ""}</div>`;
+  h += `<div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h2>${esc(r.headline)}</h2><p>${esc(r.answer)}</p>${r.how_sure ? `<p class="sure">${esc(r.how_sure)}</p>` : ""}</div></div>`;
 
   if (ok) {
-    const arms = r.arms.map((a, i) => ({ label: a.name, est: a.estimate * m, lo: a.ci_low * m, hi: a.ci_high * m, color: i ? "var(--c-treat)" : "var(--c-control)" }));
+    const arms = r.arms.map((a, i) => ({ label: a.name, est: a.estimate * m, lo: a.ci_low * m, hi: a.ci_high * m, color: i ? "var(--purple)" : "var(--orange)" }));
     const e = r.effect;
-    const diff = [{ label: "Difference", est: e.diff * m, lo: e.ci_low * m, hi: e.ci_high * m, color: r.verdict === "clear_difference" ? "var(--good)" : "var(--neutral)" }];
-    h += `<div class="card"><div class="charts">
-      <div><p class="chart-title">${esc(r.outcome_label[0].toUpperCase() + r.outcome_label.slice(1))}, by group</p>${intervalChart(arms, { fmt: f1, aria: "Result for each group with its likely range", floor0: pts })}<div class="chart-cap">Dots are what we saw. Lines show the likely range of the true value.</div></div>
-      <div><p class="chart-title">The difference (new minus baseline)</p>${intervalChart(diff, { fmt: fd, zero: true, aria: "Difference between groups with its likely range" })}<div class="chart-cap">If the line crosses the dashed zero line, we can't rule out no change.</div></div>
+    const diff = [{ label: "Difference", est: e.diff * m, lo: e.ci_low * m, hi: e.ci_high * m, color: r.verdict === "clear_difference" ? "var(--green)" : "var(--blue)" }];
+    h += `<div class="card"><p class="title"><span class="ic p">📊</span> The picture</p><div class="charts">
+      <div><p class="ct">${esc(r.outcome_label[0].toUpperCase() + r.outcome_label.slice(1))}</p>${intervalChart(arms, { fmt: f1, aria: "Result per group with likely range", floor0: pts })}<div class="cap">Dot = what we saw. Line = likely range.</div></div>
+      <div><p class="ct">The difference</p>${intervalChart(diff, { fmt: fd, zero: true, aria: "Difference with likely range" })}<div class="cap">Line touches the dashed 0 = could be no change.</div></div>
     </div></div>`;
   }
 
   if (r.mode === "right_answer" && r.robustness.length) {
-    h += `<div class="card"><p class="chart-title">Cross-checks</p><p class="sub" style="margin:0 0 6px">Independent ways of asking the same question. A trustworthy result survives all of them.</p>
-      ${r.robustness.map((x) => `<div class="check"><span class="dot ${x.agrees ? "pass" : "warn"}">${x.agrees ? "✓" : "!"}</span><div><b>${esc(x.name)}</b>${esc(x.result)}<small>${esc(x.description)}</small></div></div>`).join("")}</div>`;
+    h += `<div class="card"><p class="title"><span class="ic g">🧪</span> Cross-checks</p>
+      ${r.robustness.map((x) => item(x.agrees ? "✅" : "⚠️", x.name, x.result + " " + x.description)).join("")}</div>`;
   }
 
   if (r.mode === "research" && ok) {
-    h += `<div class="card"><p class="chart-title">Who responds differently?</p><p class="sub" style="margin:0 0 10px">${esc(r.segment_note)}</p>
-      ${r.segments.length ? `<div class="scroll"><table><thead><tr><th>Slice</th><th>Rows (base / new)</th><th>Difference (95% range)</th><th>Chance of a gap this big if nothing changed (adjusted)</th></tr></thead><tbody>
-      ${r.segments.map((s) => `<tr class="${s.flagged ? "flag" : ""}"><td><b>${esc(s.column)}</b> = ${esc(s.level)}</td><td>${s.n_control.toLocaleString()} / ${s.n_treatment.toLocaleString()}</td>
-        <td>${fd(s.diff * m)} <span class="sub">(${fd(s.ci_low * m)} to ${fd(s.ci_high * m)})</span></td><td>${s.p_adj < 0.001 ? "&lt; 0.1%" : (s.p_adj * 100).toFixed(0) + "%"}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`;
+    h += `<div class="card"><p class="title"><span class="ic b">🔍</span> Who's different?</p><p class="muted" style="margin:0 0 10px;font-weight:700">${esc(r.segment_note)}</p>
+      ${r.segments.length ? `<div class="scroll"><table><thead><tr><th>Slice</th><th>Rows</th><th>Difference</th><th>If nothing changed*</th></tr></thead><tbody>
+      ${r.segments.map((s) => `<tr class="${s.flagged ? "flag" : ""}"><td>${s.flagged ? "⭐ " : ""}<b>${esc(s.column)}</b> = ${esc(s.level)}</td><td>${s.n_control.toLocaleString()} / ${s.n_treatment.toLocaleString()}</td>
+        <td class="v">${fd(s.diff * m)} <span class="muted" style="font-weight:600">(${fd(s.ci_low * m)} to ${fd(s.ci_high * m)})</span></td><td>${s.p_adj < 0.001 ? "&lt; 0.1%" : (s.p_adj * 100).toFixed(0) + "%"}</td></tr>`).join("")}</tbody></table></div>
+      <div class="cap">*How often a gap this big would appear, adjusted for checking many slices.</div>` : ""}</div>`;
   }
 
-  h += `<div class="card"><div class="tabs"><button class="tab on" data-t="ev">Evidence</button><button class="tab" data-t="me">Method</button></div>
-    <div id="t_ev">
-      <p class="chart-title">Data checks</p>
-      ${r.checks.map((c) => `<div class="check"><span class="dot ${c.status}">${{ pass: "✓", warn: "!", fail: "✕", info: "i" }[c.status]}</span><div><b>${esc(c.name)}</b>${esc(c.message)}</div></div>`).join("")}
-      ${r.causal_label ? `<div class="box"><b>Cause or coincidence?</b>${esc(r.causal_label.replace(/^Cause or coincidence\?\s*/, ""))}</div>` : ""}
-      ${r.cannot_tell.length ? `<div class="box"><b>What this can't tell you</b><ul class="plain">${r.cannot_tell.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
-    </div>
-    <div id="t_me" class="hidden">
-      ${r.method_summary ? `<p style="margin-top:0">${esc(r.method_summary)}</p>` : "<p>No analysis was run.</p>"}
-      ${r.audit.length ? `<div class="scroll"><table><thead><tr><th>Number</th><th>Value</th><th>How it was made</th></tr></thead><tbody>
-        ${r.audit.map((a) => `<tr><td>${esc(a.label)}</td><td><b>${esc(a.value)}</b></td><td>${esc(a.method)}<br><code>${esc(a.code)}</code></td></tr>`).join("")}</tbody></table></div>
-        <p class="chart-title" style="margin-top:20px">Reproduce it yourself <button class="linkish" id="copyscript" style="font-weight:400;margin-left:8px">Copy script</button></p><pre id="script">${esc(r.script)}</pre>` : ""}
+  // checks / method tabs
+  const checks = r.checks.map((c) => item(STATUS[c.status], `${CHECK_EMOJI[c.name] || "🔎"} ${c.name}`, c.message)).join("");
+  const assumptions = r.methods.length
+    ? `<div class="legend">✅ checked · ⚠️ concern · 🙋 you confirm</div>` + r.methods.map((mt) =>
+        `<div class="mblock"><div class="mname">🧪 ${esc(mt.name)}</div>${mt.assumptions.map((a) => item(ASSUME[a.status], a.text)).join("")}</div>`).join("")
+    : `<p class="muted">Nothing ran.</p>`;
+  const defTable = (key, head) => `<div class="scroll"><table><thead><tr><th>Number</th><th>Value</th><th>${head}</th></tr></thead><tbody>
+      ${r.audit.map((a) => `<tr><td>${esc(a.label)}</td><td class="v">${esc(a.value)}</td><td>${esc(a[key])}</td></tr>`).join("")}</tbody></table></div>`;
+  const rp = r.repro || {}, ver = rp.versions || {};
+  const repro = r.audit.length ? `
+      <div class="fp">🔖 Data fingerprint <code>${esc((rp.data_sha256 || "n/a").slice(0, 16))}</code> · ${(rp.rows_used || 0).toLocaleString()} rows · seed ${esc(rp.seed)} ·
+        ${Object.entries(ver).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(" · ")}</div>
+      <div class="scroll"><table><thead><tr><th>Number</th><th>How</th></tr></thead><tbody>
+        ${r.audit.map((a) => `<tr><td>${esc(a.label)}</td><td>${esc(a.method)}<br><code>${esc(a.code)}</code></td></tr>`).join("")}</tbody></table></div>
+      <div class="row" style="margin-top:14px"><button class="btn soft" id="copyscript">📋 Copy script</button><button class="btn soft" id="dlscript">⬇️ Download .py</button></div>
+      <pre id="script">${esc(r.script)}</pre>` : `<p class="muted">Nothing ran.</p>`;
+
+  h += `<div class="card"><div class="tabbar" data-g="main"><button class="tab on" data-t="checks">🩺 Checks</button><button class="tab" data-t="method">🧰 Method</button></div>
+    <div class="panel" data-g="main" data-t="checks">${checks}
+      ${r.causal_label ? `<div class="box"><b>🎲 Cause?</b>${esc(r.causal_label)}</div>` : ""}
+      ${r.cannot_tell.length ? `<div class="box"><b>🚫 Can't tell you</b><ul>${r.cannot_tell.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}</div>
+    <div class="panel hidden" data-g="main" data-t="method">
+      <div class="tabbar sub" data-g="meth"><button class="tab on" data-t="a">🧱 Assumptions</button><button class="tab" data-t="t">🎓 Technical</button><button class="tab" data-t="p">💬 In practice</button><button class="tab" data-t="r">🔁 Reproduce</button></div>
+      <div class="panel" data-g="meth" data-t="a">${assumptions}</div>
+      <div class="panel hidden" data-g="meth" data-t="t">${r.audit.length ? defTable("technical", "Definition") : ""}</div>
+      <div class="panel hidden" data-g="meth" data-t="p">${r.audit.length ? defTable("plain", "Means") : ""}</div>
+      <div class="panel hidden" data-g="meth" data-t="r">${repro}</div>
     </div></div>`;
 
   if (r.mode === "quick" && r.caveats.length) {
-    h += `<div class="card caveats"><h3>Caveats</h3><ul class="plain">${r.caveats.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`;
+    h += `<div class="card caveats"><p class="title"><span class="ic o">⚠️</span> Caveats</p><ul>${r.caveats.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`;
   }
 
   root.innerHTML = h;
-  root.querySelectorAll(".tab").forEach((b) => (b.onclick = () => {
-    root.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
-    $("t_ev").classList.toggle("hidden", b.dataset.t !== "ev"); $("t_me").classList.toggle("hidden", b.dataset.t !== "me");
-  }));
-  const cs = $("copyscript"); if (cs) cs.onclick = () => { navigator.clipboard.writeText(r.script); cs.textContent = "Copied"; };
+  bindTabs(root);
+  const cs = $("copyscript"); if (cs) cs.onclick = () => { navigator.clipboard.writeText(r.script); cs.textContent = "✅ Copied"; };
+  const dl = $("dlscript"); if (dl) dl.onclick = () => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([r.script], { type: "text/x-python" }));
+    a.download = "databoarder_repro.py"; a.click(); URL.revokeObjectURL(a.href);
+  };
   root.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { state.mode = b.dataset.rm; renderModes(); await loadQuestions(); await run(); }));
   const ch = $("change"); if (ch) ch.onclick = () => openConfirm([]);
   root.scrollIntoView({ behavior: "smooth", block: "start" });

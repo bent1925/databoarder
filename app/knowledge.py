@@ -1,0 +1,172 @@
+"""Single source of truth for what each statistic MEANS and what must be TRUE.
+
+Every number in a report gets two descriptions:
+  technical - the textbook-correct definition
+  plain     - what it means in practice
+and every method lists the assumptions its result depends on. Assumptions we can
+test in the data carry a checked status; the rest are marked "you confirm".
+"""
+from __future__ import annotations
+
+import numpy as np
+
+from .schemas import Assumption, AuditItem, Check, MethodInfo, Report
+
+STATS: dict[str, dict[str, str]] = {
+    "rate": {
+        "technical": "Sample proportion: successes ÷ rows in the group.",
+        "plain": "Share of people who did it.",
+    },
+    "mean": {
+        "technical": "Sample mean of the outcome in the group.",
+        "plain": "The typical value per person.",
+    },
+    "arm_ci": {
+        "technical": "95% interval for one group: Wilson score interval (rates) or t-interval for the mean (averages).",
+        "plain": "Where this group's true value likely sits.",
+    },
+    "diff": {
+        "technical": "Treatment estimate minus control estimate.",
+        "plain": "How far the new version moved the number.",
+    },
+    "rel": {
+        "technical": "Difference ÷ control estimate.",
+        "plain": "The change as a share of the starting point. Shaky if the starting point is near 0.",
+    },
+    "ci_binary": {
+        "technical": "95% Newcombe hybrid-score interval for a difference of two independent proportions, built from Wilson score intervals. Across repeated samples, about 95% of such intervals contain the true difference.",
+        "plain": "Likely range for the true change. Wide = unsure. Includes 0 = could be no change.",
+    },
+    "ci_mean": {
+        "technical": "95% interval for a difference in means from Welch's t-distribution (Welch–Satterthwaite degrees of freedom). Across repeated samples, about 95% of such intervals contain the true difference.",
+        "plain": "Likely range for the true change. Wide = unsure. Includes 0 = could be no change.",
+    },
+    "p_binary": {
+        "technical": "Two-sided p-value of the pooled two-proportion z-test (score test) of H0: both groups have the same true rate. P(a result at least this extreme | H0).",
+        "plain": "If nothing changed, how often a gap this big would appear. Small = hard to blame on chance. Not the chance the result is wrong.",
+    },
+    "p_mean": {
+        "technical": "Two-sided p-value of Welch's t-test of H0: both groups have the same true mean. P(a result at least this extreme | H0).",
+        "plain": "If nothing changed, how often a gap this big would appear. Small = hard to blame on chance. Not the chance the result is wrong.",
+    },
+    "mde": {
+        "technical": "Smallest true difference detected with 80% power at two-sided α = 0.05: (1.96 + 0.84) × standard error of the difference ≈ 2.80 × SE, using the observed SE.",
+        "plain": "Real gaps smaller than this will probably be missed.",
+    },
+    "rule": {
+        "technical": "Called 'clear' only if the 95% range excludes 0 and p < 0.05.",
+        "plain": "'Clear' needs both signals to agree.",
+    },
+    "fisher": {
+        "technical": "Fisher's exact test, two-sided p-value under the hypergeometric distribution with margins fixed. H0: equal true rates.",
+        "plain": "A second opinion that doesn't lean on large-sample math.",
+    },
+    "mannwhitney": {
+        "technical": "Mann–Whitney U (rank-sum) test, two-sided. H0: a random value from one group is equally likely to be above or below one from the other.",
+        "plain": "Does one group tend to score higher? Extreme values barely matter.",
+    },
+    "shuffle": {
+        "technical": "Monte Carlo permutation test: (hits + 1) ÷ 2,001, where hits = random relabelings (seed 0) with |mean difference| ≥ observed.",
+        "plain": "Reshuffle who got which version. How often does chance alone match this gap?",
+    },
+    "trim": {
+        "technical": "Welch's t-test after dropping pooled values below the 1st or above the 99th percentile.",
+        "plain": "The same question without the extreme values.",
+    },
+    "holm": {
+        "technical": "Holm–Bonferroni step-down adjusted p-values. Keeps the chance of at least one false positive across all slices (family-wise error rate) at 5%.",
+        "plain": "Chance figures corrected for checking many slices at once.",
+    },
+}
+
+
+def item(label: str, value: str, key: str, method: str, code: str) -> AuditItem:
+    s = STATS[key]
+    return AuditItem(label=label, value=value, method=method, code=code,
+                     technical=s["technical"], plain=s["plain"])
+
+
+# ---------------------------------------------------------------- assumptions
+
+def _status(checks: list[Check], name: str, default: str = "manual") -> str:
+    for c in checks:
+        if c.name == name:
+            return {"pass": "ok", "warn": "warn", "info": "manual", "fail": "warn"}[c.status]
+    return default
+
+
+def _independent(checks):
+    return Assumption(text="Each row is a different person", status=_status(checks, "Repeat people"))
+
+
+def _missing(checks):
+    names = [c for c in checks if c.name in ("Missing results", "Missing balance")]
+    if any(c.status == "warn" for c in names):
+        st = "warn"
+    elif any(c.name == "Missing balance" for c in names):
+        st = "ok"
+    else:
+        st = "ok" if all("None" in c.message for c in names) else "manual"
+    return Assumption(text="Missing results don't depend on the version", status=st)
+
+
+MANUAL = {
+    "random": Assumption(text="Versions were assigned at random", status="manual"),
+    "nointerference": Assumption(text="One person's version doesn't affect another's", status="manual"),
+    "samemeasure": Assumption(text="Both groups were measured the same way", status="manual"),
+    "once": Assumption(text="One planned test, looked at once at the end", status="manual"),
+}
+
+
+def build_methods(kind: str, mode: str, checks: list[Check], c: np.ndarray, t: np.ndarray) -> list[MethodInfo]:
+    ind, miss = _independent(checks), _missing(checks)
+    methods: list[MethodInfo] = []
+
+    if kind == "binary":
+        enough = min(c.sum(), len(c) - c.sum(), t.sum(), len(t) - t.sum()) >= 10
+        main = [ind,
+                Assumption(text="At least 10 yes and 10 no in each group", status="ok" if enough else "warn"),
+                miss, MANUAL["random"], MANUAL["nointerference"], MANUAL["samemeasure"], MANUAL["once"]]
+        methods.append(MethodInfo(name="Main test (Newcombe range + z-test)", assumptions=main))
+    else:
+        main = [ind,
+                Assumption(text="Enough rows that averages are steady (no huge values dominating)",
+                           status=_status(checks, "Extreme values", "ok")),
+                miss, MANUAL["random"], MANUAL["nointerference"], MANUAL["samemeasure"], MANUAL["once"]]
+        methods.append(MethodInfo(name="Main test (Welch t-test)", assumptions=main))
+
+    if mode == "right_answer":
+        if kind == "binary":
+            methods.append(MethodInfo(name="Exact test (Fisher)", assumptions=[
+                ind, Assumption(text="Outcome is yes/no", status="ok")]))
+        else:
+            methods.append(MethodInfo(name="Rank test (Mann–Whitney)", assumptions=[
+                ind, Assumption(text="Group shapes look alike (to read it as a shift)", status="manual")]))
+        methods.append(MethodInfo(name="Shuffle test", assumptions=[
+            ind, Assumption(text="Versions were assigned at random, so labels are swappable", status="manual")]))
+        if kind == "continuous":
+            methods.append(MethodInfo(name="Without extreme values", assumptions=[
+                ind, Assumption(text="Extreme values are noise, not part of the real effect", status="manual")]))
+
+    if mode == "research":
+        methods.append(MethodInfo(name="Slice scan (Holm)", assumptions=[
+            Assumption(text="Every slice looked at is counted", status="ok"),
+            Assumption(text="50+ rows per group in each slice", status="ok"),
+            Assumption(text="Slice columns describe people (country), not results", status="manual"),
+            Assumption(text="Slices weren't picked after seeing the results", status="manual"),
+            Assumption(text="Main-test assumptions hold inside each slice", status="manual"),
+        ]))
+    return methods
+
+
+def attach_method_info(rep: Report, kind: str, mode: str, checks: list[Check],
+                       c: np.ndarray, t: np.ndarray) -> Report:
+    rep.methods = build_methods(kind, mode, checks, c, t)
+    for r in rep.robustness:
+        if r.key in STATS:
+            rep.audit.append(item(f"{r.name}: p-value", f"{r.p_value:.4g}", r.key,
+                                  "See Reproduce script", "# see script"))
+    if mode == "research" and rep.segments:
+        rep.audit.append(item("Slices checked", str(len(rep.segments)), "holm",
+                              "Holm step-down over all slices", "multipletests(p, method='holm')"))
+    return rep

@@ -1,21 +1,29 @@
-# Dashboarder
+# Databoarder
 
 Ask a business question, upload a CSV, get a plain-language A/B test report.
 
 ## Run
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
     export ANTHROPIC_API_KEY=...   # optional; without it, columns are guessed from names
-    uvicorn app.main:app --reload   # then open http://localhost:8000
-    pytest
+    python -m uvicorn app.main:app   # then open http://localhost:8000
+    python -m pytest
 
 ## Design
 - The LLM only translates a question into an `ABTestSpec` (app/translator.py). It never computes.
-- Statistics are fixed, tested code (app/ab_test.py); data checks run first (app/checks.py).
+- Statistics are fixed, tested code (app/ab_test.py, app/modes.py); data checks run first (app/checks.py).
 - The read-back sentence is written by code from the spec, so the user confirms what will actually run.
-- Reports have three layers: answer, evidence, method (every number + code + reproducible script).
+- Three kinds of work: **Quick and dirty** (caveats at the end), **Need the right answer** (independent
+  cross-checks, shaky things flagged up top), **Research** (subgroup scan with Holm correction).
 
-## Modes
-- **Quick and dirty** - same analysis; caveats listed at the end.
-- **Need the right answer** - adds independent cross-checks (exact/rank test, shuffle test, trimmed run) and puts anything shaky at the top.
-- **Research** - also scans subgroups with a Holm correction so noise isn't mistaken for findings.
-Prepared questions are built from your columns and carry a finished spec; "Other" goes through the translator and is always confirmed.
+## Method tabs (app/knowledge.py is the single source of truth)
+- **Assumptions** per method, each marked checked (data looked fine), concern, or "you confirm".
+- **Technical**: textbook-correct definition of every number.
+- **In practice**: what each number means, in plain words.
+- **Reproduce**: data fingerprint (sha256), library versions, seed, code per number, and a standalone script
+  that reproduces every number in the report (including cross-checks and slices).
+
+## Correctness and reproducibility guards (tests/)
+- Newcombe range and pooled z-test re-derived by hand; Welch range and detectable gap re-derived by hand.
+- Simulations: the 95% range covers the truth about 95% of the time; false alarms stay near 5%.
+- The generated script is executed in every mode and its output compared with the report.
+- Same data in, identical report out (fixed seed).

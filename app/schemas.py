@@ -45,10 +45,12 @@ class Check(BaseModel):
 class Robustness(BaseModel):
     """One independent cross-check of the main result."""
 
+    key: str = ""
     name: str
     description: str
     result: str
     agrees: bool
+    p_value: float = 1.0
 
 
 class Segment(BaseModel):
@@ -66,13 +68,32 @@ class Segment(BaseModel):
     flagged: bool
 
 
+class Assumption(BaseModel):
+    """Something that must be true for a result to hold.
+
+    ok     = we checked it in the data and it looks fine
+    warn   = we checked it and there is a concern
+    manual = the data can't tell us; the person has to confirm it
+    """
+
+    text: str
+    status: Literal["ok", "warn", "manual"]
+
+
+class MethodInfo(BaseModel):
+    name: str
+    assumptions: list[Assumption]
+
+
 class AuditItem(BaseModel):
-    """One number in the report, with where it came from."""
+    """One number in the report: where it came from and what it means."""
 
     label: str
     value: str
     method: str
     code: str
+    technical: str = ""   # the textbook-correct definition
+    plain: str = ""       # what it means in practice
 
 
 class ArmSummary(BaseModel):
@@ -107,6 +128,8 @@ class Report(BaseModel):
     segment_note: str = ""
     # Layer 3: the method
     method_summary: str = ""
+    methods: list[MethodInfo] = []     # assumptions, grouped by method
+    repro: dict = {}                   # data fingerprint, library versions, seed
     audit: list[AuditItem] = []
     script: str = ""
     spec: Optional[ABTestSpec] = None

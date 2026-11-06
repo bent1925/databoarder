@@ -5,126 +5,92 @@ touches it.
 """
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 import pandas as pd
+import scipy
+import statsmodels
 from scipy import stats
-from statsmodels.stats.proportion import (
-    confint_proportions_2indep,
-    proportion_confint,
-    test_proportions_2indep,
-)
+from statsmodels.stats.proportion import proportion_confint
 
 from .checks import detect_outcome_kind, has_blocking_failure, run_checks, validate_spec_against_data
 from .interpret import chance_phrase, fmt_num, fmt_pct, humanize
-from .modes import apply_mode
-from .schemas import ABTestSpec, ArmSummary, AuditItem, Check, Report
+from .knowledge import attach_method_info, item
+from .modes import SEED, apply_mode, effect
+from .schemas import ABTestSpec, ArmSummary, Check, Report
+from .script import build_script
 
-ALPHA = 0.05
 Z_POWER = 1.96 + 0.8416  # 95% confidence + 80% power
 
 
-def _script(spec: ABTestSpec, kind: str, csv_name: str) -> str:
-    """A standalone Python script an analyst can run to reproduce the report."""
-    head = f'''import pandas as pd
-from scipy import stats
-from statsmodels.stats.proportion import confint_proportions_2indep, test_proportions_2indep
-
-df = pd.read_csv({csv_name!r})
-df = df[df[{spec.group_col!r}].astype(str).isin([{spec.control!r}, {spec.treatment!r}])]
-df = df.dropna(subset=[{spec.outcome_col!r}])
-c = df.loc[df[{spec.group_col!r}].astype(str) == {spec.control!r}, {spec.outcome_col!r}]
-t = df.loc[df[{spec.group_col!r}].astype(str) == {spec.treatment!r}, {spec.outcome_col!r}]
-'''
-    if kind == "binary":
-        body = '''
-low, high = confint_proportions_2indep(t.sum(), len(t), c.sum(), len(c), method="newcomb")
-p_value = test_proportions_2indep(t.sum(), len(t), c.sum(), len(c), method="wald").pvalue
-print("control rate", round(c.mean(), 4), "| treatment rate", round(t.mean(), 4))
-print("difference", round(t.mean() - c.mean(), 4), "| 95% range", (round(float(low), 4), round(float(high), 4)), "| p-value", round(float(p_value), 5))
-'''
-    else:
-        body = '''
-res = stats.ttest_ind(t, c, equal_var=False)
-ci = res.confidence_interval(0.95)
-print("control mean", round(c.mean(), 4), "| treatment mean", round(t.mean(), 4))
-print("difference", round(t.mean() - c.mean(), 4), "| 95% range", (round(float(ci.low), 4), round(float(ci.high), 4)), "| p-value", round(float(res.pvalue), 5))
-'''
-    return head + body
-
-
-def analyze(df: pd.DataFrame, spec: ABTestSpec, csv_name: str = "your_file.csv", mode: str = "quick") -> Report:
+def analyze(df: pd.DataFrame, spec: ABTestSpec, csv_name: str = "your_file.csv",
+            mode: str = "quick", data_sha: str = "") -> Report:
     problems = validate_spec_against_data(df, spec)
     if problems:
-        r = _blocked("The question doesn't fit your data.", problems, spec)
+        r = _blocked("Can't answer yet.", problems, spec)
         r.mode = mode
         return r
 
     checks = run_checks(df, spec)
     if has_blocking_failure(checks):
-        r = _blocked("There isn't enough data to answer this reliably.",
-                     [c.message for c in checks if c.status == "fail"], spec, checks)
+        r = _blocked("Can't answer yet.", [c.message for c in checks if c.status == "fail"], spec, checks)
         r.mode = mode
         return r
 
     g = df[spec.group_col].astype(str)
     sub = df[g.isin([spec.control, spec.treatment])].dropna(subset=[spec.outcome_col])
     gs = sub[spec.group_col].astype(str)
-    c = sub.loc[gs == spec.control, spec.outcome_col].astype(float)
-    t = sub.loc[gs == spec.treatment, spec.outcome_col].astype(float)
+    c = sub.loc[gs == spec.control, spec.outcome_col].astype(float).to_numpy()
+    t = sub.loc[gs == spec.treatment, spec.outcome_col].astype(float).to_numpy()
     kind = detect_outcome_kind(sub[spec.outcome_col])
 
-    rep = _binary(spec, c, t, checks, csv_name) if kind == "binary" else _continuous(spec, c, t, checks, csv_name)
-    return apply_mode(rep, sub, spec, kind, mode)
+    rep = _binary(spec, c, t, checks) if kind == "binary" else _continuous(spec, c, t, checks)
+    rep = apply_mode(rep, sub, spec, kind, mode)
+    rep = attach_method_info(rep, kind, mode, checks, c, t)
+
+    versions = {"python": sys.version.split()[0], "pandas": pd.__version__, "numpy": np.__version__,
+                "scipy": scipy.__version__, "statsmodels": statsmodels.__version__}
+    rep.repro = {"data_sha256": data_sha, "rows_used": int(len(sub)), "seed": SEED, "versions": versions}
+    header = (f"# Dashboarder reproduction script\n"
+              f"# Data fingerprint (sha256): {data_sha or 'n/a'}\n"
+              f"# Built with: " + ", ".join(f"{k} {v}" for k, v in versions.items()) + "\n\n")
+    rep.script = build_script(spec, kind, csv_name, mode, header)
+    return rep
 
 
 # --------------------------------------------------------------------------- binary
 
-def _binary(spec, c, t, checks, csv_name) -> Report:
+def _binary(spec, c, t, checks) -> Report:
     nc, nt = len(c), len(t)
     xc, xt = int(c.sum()), int(t.sum())
     pc, pt = xc / nc, xt / nt
-    diff = pt - pc
-    lo, hi = confint_proportions_2indep(xt, nt, xc, nc, method="newcomb", compare="diff")
-    p_value = float(test_proportions_2indep(xt, nt, xc, nc, method="wald", compare="diff").pvalue)
-    rel = diff / pc if pc > 0 else float("nan")
+    e = effect(c, t, "binary")
+    rel = e["diff"] / pc if pc > 0 else float("nan")
     se = float(np.sqrt(pc * (1 - pc) / nc + pt * (1 - pt) / nt))
-    mde = Z_POWER * se
 
     arms = []
     for name, x, n in ((spec.control, xc, nc), (spec.treatment, xt, nt)):
         a, b = proportion_confint(x, n, method="wilson")
         arms.append(ArmSummary(name=name, n=n, estimate=x / n, ci_low=float(a), ci_high=float(b)))
 
-    label = f"{humanize(spec.outcome_col)} rate"
-    clear = (lo > 0 or hi < 0) and p_value < ALPHA
-    return _assemble(
-        spec=spec, kind="rate", label=label, checks=checks, arms=arms,
-        diff=diff, lo=float(lo), hi=float(hi), p_value=p_value, rel=rel, mde=mde, clear=clear,
-        unit_pts=True, csv_name=csv_name, method_kind="binary",
-        method_summary=("Compared the share of rows with a 1 in each group. The gap's range comes from the "
-                        "Newcombe method; the chance statement comes from a two-proportion z-test."),
-        audit_extra=[
-            AuditItem(label=f"{spec.control} rate", value=fmt_pct(pc), method="Successes divided by rows",
-                      code=f"c.sum() / len(c)  # {xc} / {nc}"),
-            AuditItem(label=f"{spec.treatment} rate", value=fmt_pct(pt), method="Successes divided by rows",
-                      code=f"t.sum() / len(t)  # {xt} / {nt}"),
-        ],
-    )
+    extra = [
+        item(f"{spec.control} rate", fmt_pct(pc), "rate", "Successes ÷ rows", f"c.sum() / len(c)  # {xc} / {nc}"),
+        item(f"{spec.treatment} rate", fmt_pct(pt), "rate", "Successes ÷ rows", f"t.sum() / len(t)  # {xt} / {nt}"),
+    ]
+    return _assemble(spec=spec, kind="rate", label=f"{humanize(spec.outcome_col)} rate", checks=checks, arms=arms,
+                     e=e, rel=rel, mde=Z_POWER * se, unit_pts=True, method_kind="binary", audit_extra=extra,
+                     arm_ci_code="proportion_confint(x, n, method='wilson')")
 
 
 # ------------------------------------------------------------------------ continuous
 
-def _continuous(spec, c, t, checks, csv_name) -> Report:
+def _continuous(spec, c, t, checks) -> Report:
     nc, nt = len(c), len(t)
     mc, mt = float(c.mean()), float(t.mean())
-    diff = mt - mc
-    res = stats.ttest_ind(t, c, equal_var=False)
-    ci = res.confidence_interval(0.95)
-    lo, hi = float(ci.low), float(ci.high)
-    p_value = float(res.pvalue)
-    rel = diff / mc if mc != 0 else float("nan")
+    e = effect(c, t, "continuous")
+    rel = e["diff"] / mc if mc != 0 else float("nan")
     se = float(np.sqrt(t.var(ddof=1) / nt + c.var(ddof=1) / nc))
-    mde = Z_POWER * se
 
     arms = []
     for name, s in ((spec.control, c), (spec.treatment, t)):
@@ -132,89 +98,77 @@ def _continuous(spec, c, t, checks, csv_name) -> Report:
         h = sem * stats.t.ppf(0.975, len(s) - 1)
         arms.append(ArmSummary(name=name, n=len(s), estimate=m, ci_low=m - h, ci_high=m + h))
 
-    label = f"average {humanize(spec.outcome_col)}"
-    clear = (lo > 0 or hi < 0) and p_value < ALPHA
-    return _assemble(
-        spec=spec, kind="average", label=label, checks=checks, arms=arms,
-        diff=diff, lo=lo, hi=hi, p_value=p_value, rel=rel, mde=mde, clear=clear,
-        unit_pts=False, csv_name=csv_name, method_kind="continuous",
-        method_summary=("Compared the average in each group using Welch's t-test, which does not assume the "
-                        "two groups are equally spread out."),
-        audit_extra=[
-            AuditItem(label=f"{spec.control} average", value=fmt_num(mc), method="Mean of the outcome",
-                      code=f"c.mean()  # n={nc}"),
-            AuditItem(label=f"{spec.treatment} average", value=fmt_num(mt), method="Mean of the outcome",
-                      code=f"t.mean()  # n={nt}"),
-        ],
-    )
+    extra = [
+        item(f"{spec.control} average", fmt_num(mc), "mean", "Mean of the outcome", f"c.mean()  # n={nc}"),
+        item(f"{spec.treatment} average", fmt_num(mt), "mean", "Mean of the outcome", f"t.mean()  # n={nt}"),
+    ]
+    return _assemble(spec=spec, kind="average", label=f"average {humanize(spec.outcome_col)}", checks=checks,
+                     arms=arms, e=e, rel=rel, mde=Z_POWER * se, unit_pts=False, method_kind="continuous",
+                     audit_extra=extra, arm_ci_code="mean ± t(0.975, n-1) × sem")
 
 
 # ---------------------------------------------------------------------------- shared
 
-def _assemble(*, spec, kind, label, checks, arms, diff, lo, hi, p_value, rel, mde, clear,
-              unit_pts, csv_name, method_kind, method_summary, audit_extra) -> Report:
-    def d(x):  # format a difference
-        return f"{abs(x) * 100:.1f} percentage points" if unit_pts else fmt_num(abs(x))
+def _assemble(*, spec, kind, label, checks, arms, e, rel, mde, unit_pts, method_kind, audit_extra,
+              arm_ci_code) -> Report:
+    diff, lo, hi, p_value = e["diff"], e["lo"], e["hi"], e["p"]
+    clear = (lo > 0 or hi < 0) and p_value < 0.05
 
-    def d_signed(x):
-        s = "+" if x >= 0 else "−"
-        return f"{s}{abs(x) * 100:.1f} pts" if unit_pts else f"{s}{fmt_num(abs(x))}"
+    def d(x):  # unsigned amount
+        return f"{abs(x) * 100:.1f} pts" if unit_pts else fmt_num(abs(x))
+
+    def ds(x):  # signed amount
+        return ("+" if x >= 0 else "−") + d(x)
+
+    def val(x):
+        return fmt_pct(x) if unit_pts else fmt_num(x)
 
     direction = "raised" if diff > 0 else "lowered"
     a_c, a_t = arms[0].estimate, arms[1].estimate
-    from_to = (f"{fmt_pct(a_c)} → {fmt_pct(a_t)}" if unit_pts else f"{fmt_num(a_c)} → {fmt_num(a_t)}")
-    rel_txt = "" if (rel != rel) else f" ({'+' if rel >= 0 else '−'}{abs(rel) * 100:.1f}% relative)"
+    named = f"{spec.control} {val(a_c)} → {spec.treatment} {val(a_t)}"
+    rel_txt = "" if rel != rel else f" ({'+' if rel >= 0 else '−'}{abs(rel) * 100:.1f}%)"
     warn_n = sum(1 for c in checks if c.status == "warn")
 
     if clear:
         verdict = "clear_difference"
         headline = f"{spec.treatment} {direction} the {label}."
-        answer = (f"Yes. Compared with {spec.control}, {spec.treatment} {direction} the {label} by "
-                  f"{d(diff)}{rel_txt}: {from_to}.")
-        how_sure = (f"We're 95% sure the true change is between {d_signed(lo)} and {d_signed(hi)}. "
-                    f"If there were really no difference, a gap this big would show up by chance {chance_phrase(p_value)}.")
+        answer = f"{named} · {ds(diff)}{rel_txt}"
+        how_sure = (f"Likely range: {ds(lo)} to {ds(hi)}. If nothing changed, a gap this big "
+                    f"would appear {chance_phrase(p_value)}.")
     else:
         verdict = "no_clear_difference"
-        headline = f"No clear difference in the {label}."
-        t_val, c_val = from_to.split(" → ")[1], from_to.split(" → ")[0]
-        if p_value < 0.2:
-            answer = (f"Not conclusive. {spec.treatment} came out at {t_val} versus {c_val} for {spec.control}, "
-                      f"which points toward a difference, but chance alone could still produce a gap this size: "
-                      f"it would show up {chance_phrase(p_value)} even if nothing changed.")
-        else:
-            answer = (f"We can't tell them apart. {spec.treatment} came out at {t_val} versus "
-                      f"{c_val} for {spec.control}, but a gap that size is easily explained by chance.")
-        how_sure = (f"The true change could be anywhere from {d_signed(lo)} to {d_signed(hi)}. "
-                    f"This test could only reliably detect a difference of about {d(mde)} or more; "
-                    f"anything smaller would be invisible to it. That is not the same as proof of no effect.")
+        headline = f"No clear difference in {label}."
+        answer = f"{named}. " + ("Leaning that way, but not conclusive." if p_value < 0.2 else "Too close to call.")
+        how_sure = (f"Likely range: {ds(lo)} to {ds(hi)}. This test only spots gaps of {d(mde)} or more. "
+                    f"Not proof of no effect.")
     if warn_n:
-        how_sure += f" Note: {warn_n} data check{'s' if warn_n > 1 else ''} raised a warning, so read this with extra care."
+        how_sure += f" {warn_n} data warning{'s' if warn_n > 1 else ''}: see checks."
 
-    causal = ("Cause or coincidence? If people were assigned to a version at random (like a coin flip), this "
-              "difference can be read as caused by the change. If people chose their own version, it only "
-              "shows the two moved together, and something else could explain it. The data can't tell us which happened.")
-    cannot = [
-        "Why the difference exists. This shows what changed, not the reason.",
-        "Whether it will last. The result covers only the period in this file.",
-        "Anything about people not in this file.",
-    ]
+    causal = ("Cause and effect only if people got versions at random. "
+              "If they chose, it just shows the two moved together.")
+    cannot = ["Why it happened.", "Whether it lasts.", "People outside this file."]
 
-    audit = audit_extra + [
-        AuditItem(label="Difference", value=d_signed(diff), method="Treatment minus control",
-                  code="t.mean() - c.mean()"),
-        *([AuditItem(label="Relative change", value=f"{'+' if rel >= 0 else '−'}{abs(rel) * 100:.1f}%",
-                     method="Difference divided by the control value", code="(t.mean() - c.mean()) / c.mean()")]
-          if rel == rel else []),
-        AuditItem(label="95% range for the difference", value=f"{d_signed(lo)} to {d_signed(hi)}",
-                  method=("Newcombe interval" if method_kind == "binary" else "Welch t interval"),
-                  code=("confint_proportions_2indep(t.sum(), len(t), c.sum(), len(c), method='newcomb')"
-                        if method_kind == "binary" else "stats.ttest_ind(t, c, equal_var=False).confidence_interval(0.95)")),
-        AuditItem(label="Chance of a gap this big if nothing changed (p-value)", value=f"{p_value:.4g}",
-                  method=("Two-proportion z-test" if method_kind == "binary" else "Welch t-test"),
-                  code=("test_proportions_2indep(t.sum(), len(t), c.sum(), len(c)).pvalue"
-                        if method_kind == "binary" else "stats.ttest_ind(t, c, equal_var=False).pvalue")),
-        AuditItem(label="Smallest difference this test can reliably detect", value=d(mde),
-                  method="2.8 × standard error (95% confidence, 80% power)", code="2.8016 * se_diff"),
+    ci_key, p_key = ("ci_binary", "p_binary") if method_kind == "binary" else ("ci_mean", "p_mean")
+    ci_code = ("confint_proportions_2indep(xt, nt, xc, nc, method='newcomb')" if method_kind == "binary"
+               else "stats.ttest_ind(t, c, equal_var=False).confidence_interval(0.95)")
+    p_code = ("test_proportions_2indep(xt, nt, xc, nc, method='score').pvalue" if method_kind == "binary"
+              else "stats.ttest_ind(t, c, equal_var=False).pvalue")
+    arm_ci = [item(f"{a.name} range", f"{val(a.ci_low)} to {val(a.ci_high)}", "arm_ci",
+                   "95% interval" + (" (Wilson)" if method_kind == "binary" else " (t)"), arm_ci_code)
+              for a in arms]
+
+    audit = [
+        *audit_extra, *arm_ci,
+        item("Difference", ds(diff), "diff", "Treatment minus control", "t.mean() - c.mean()"),
+        *([item("Relative change", f"{'+' if rel >= 0 else '−'}{abs(rel) * 100:.1f}%", "rel",
+                "Difference ÷ control", "(t.mean() - c.mean()) / c.mean()")] if rel == rel else []),
+        item("95% range for the difference", f"{ds(lo)} to {ds(hi)}", ci_key,
+             "Newcombe interval" if method_kind == "binary" else "Welch t interval", ci_code),
+        item("p-value", f"{p_value:.4g}", p_key,
+             "Pooled z-test" if method_kind == "binary" else "Welch t-test", p_code),
+        item("Smallest gap this test can spot", d(mde), "mde", "2.80 × standard error", "2.8016 * se_diff"),
+        item("'Clear' rule", "Met" if clear else "Not met", "rule", "Range excludes 0 and p < 0.05",
+             "(low > 0 or high < 0) and p < 0.05"),
     ]
 
     return Report(
@@ -222,16 +176,13 @@ def _assemble(*, spec, kind, label, checks, arms, diff, lo, hi, p_value, rel, md
         checks=checks, arms=arms,
         effect={"diff": diff, "ci_low": lo, "ci_high": hi, "p_value": p_value, "rel": None if rel != rel else rel,
                 "mde": mde, "unit_pts": unit_pts},
-        outcome_kind=kind, outcome_label=label, cannot_tell=cannot,
-        method_summary=method_summary, audit=audit,
-        script=_script(spec, method_kind, csv_name), spec=spec,
+        outcome_kind=kind, outcome_label=label, cannot_tell=cannot, audit=audit, spec=spec,
     )
 
 
 def _blocked(headline: str, reasons: list[str], spec, checks: list[Check] | None = None) -> Report:
     return Report(
-        headline=headline, answer=" ".join(reasons), how_sure="No analysis was run.",
-        verdict="blocked", causal_label="", checks=checks or [
-            Check(name="Question fits data", status="fail", message=r) for r in reasons],
+        headline=headline, answer=" ".join(reasons), how_sure="", verdict="blocked",
+        causal_label="", checks=checks or [Check(name="Question fits data", status="fail", message=r) for r in reasons],
         cannot_tell=[], spec=spec,
     )

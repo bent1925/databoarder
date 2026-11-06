@@ -26,12 +26,12 @@ def fmt_num(x: float) -> str:
 
 
 def chance_phrase(p: float) -> str:
-    """Turn a p-value into 'about N times in 100' language."""
+    """Turn a p-value into 'about N in 100 times' language."""
     if p < 0.001:
-        return "fewer than 1 time in 1,000"
+        return "fewer than 1 in 1,000 times"
     if p < 0.01:
-        return f"about {p * 1000:.0f} times in 1,000"
-    return f"about {p * 100:.0f} times in 100"
+        return f"about {p * 1000:.0f} in 1,000 times"
+    return f"about {p * 100:.0f} in 100 times"
 
 
 _NUM = re.compile(r"\d[\d,]*\.?\d*")
