@@ -178,7 +178,7 @@ def _llm_spec(question: str, profile: list[dict], design: str | None = None) -> 
                     raw["analysis_type"] = DESIGNS[design]["analysis"]
                 return raw
     except Exception as e:  # network, auth, etc. Fall back quietly but tell the user.
-        return {"_error": f"{type(e).__name__}"}
+        return {"_error": f"{type(e).__name__}: {str(e)[:300]}"}
     return None
 
 
