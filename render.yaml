@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: databoarder
+    runtime: docker
+    plan: starter            # the free plan sleeps and forgets uploads; starter keeps the process alive
+    healthCheckPath: /healthz
+    numInstances: 1          # uploads live in memory, so keep a single instance
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # you type this into Render's dashboard; it is never stored in the repo
+      - key: APP_PASSWORD
+        sync: false

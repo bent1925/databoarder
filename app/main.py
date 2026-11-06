@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import uuid
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 
@@ -18,14 +19,17 @@ from .schemas import AnySpec, Mode
 from .observational import covariate_candidates
 from .prep import prepare
 from .schemas import ObservationalSpec
+from .security import PasswordGate
 from .translator import design_options, interpret, profile_columns, readback, suggest_questions
 
 app = FastAPI(title="Data Science Dashboarder")
+app.add_middleware(PasswordGate)
 STATIC = Path(__file__).resolve().parent.parent / "static"
 MAX_BYTES = 25 * 1024 * 1024
 
-# In-memory store: fine for a single-user prototype.
-DATASETS: dict[str, dict] = {}
+# In-memory store: fine for a prototype run as ONE process. Oldest uploads are dropped past MAX_DATASETS.
+MAX_DATASETS = 40
+DATASETS: "OrderedDict[str, dict]" = OrderedDict()
 
 
 class AskBody(BaseModel):
@@ -60,6 +64,8 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, "The file needs at least 2 rows and 2 columns.")
     df, steps, notes = prepare(df)
     dataset_id = uuid.uuid4().hex[:12]
+    while len(DATASETS) >= MAX_DATASETS:
+        DATASETS.popitem(last=False)
     DATASETS[dataset_id] = {"df": df, "prep": steps, "name": file.filename or "your_file.csv",
                             "sha": hashlib.sha256(raw).hexdigest()}
     return {
@@ -124,6 +130,11 @@ def levels(dataset_id: str, column: str):
         raise HTTPException(400, "Unknown column.")
     vals = ds["df"][column].dropna().astype(str).unique().tolist()
     return {"values": sorted(vals)[:50]}
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
 
 @app.get("/")

@@ -20,7 +20,7 @@ Ask a business question, upload a CSV, and get a plain-language answer with the 
 ![A/B test](docs/screenshots/4-ab-test-quick.png)
 
 ## Run
-    python -m pip install -r requirements.txt
+    python -m pip install -r requirements-dev.txt   # requirements.txt is enough to just run it
     export ANTHROPIC_API_KEY=...   # optional; without it, columns are guessed from names
     python -m uvicorn app.main:app   # then open http://localhost:8000
     python -m pytest
@@ -68,3 +68,17 @@ Tests: `tests/test_designs.py`.
 On upload the file is checked and only unambiguous fixes are applied: trimmed spaces, "$1,200" → numbers, yes/no outcomes → 1/0, empty columns dropped.
 Anything that changes meaning (exact duplicate rows, one-column-per-date layouts) is flagged, not changed.
 Each fix is a plain line of code that is also placed at the top of the downloadable script, which starts from the raw CSV. Tests: `tests/test_prep.py`.
+
+## Deploying a demo (Render)
+1. Push the repo to GitHub (done), then on render.com choose **New → Blueprint** and pick this repo. It reads `render.yaml` and the `Dockerfile`.
+2. When asked, set two environment variables (they are never stored in the repo):
+   - `ANTHROPIC_API_KEY`: your key. Without it the app still works but guesses columns from names.
+   - `APP_PASSWORD`: one shared password for the whole site (browser sign-in box; the username can be anything).
+3. Open the URL Render gives you. `/healthz` is the only page without the password.
+
+Notes
+- **Single instance.** Uploaded files live in memory (the newest 40 are kept), so don't scale to several instances. The free plan sleeps and forgets uploads; use a paid plan for demos.
+- **Set a spend limit** in the Anthropic Console. The password is what stops strangers using your key.
+- Uploaded CSVs sit on the host's server. Don't use sensitive data in a public demo.
+- The same image runs anywhere Docker does: `docker build -t databoarder . && docker run -p 8000:8000 -e APP_PASSWORD=pw databoarder`.
+- Choosing the model: set `DASHBOARDER_MODEL` to override the default.
