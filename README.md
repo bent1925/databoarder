@@ -1,6 +1,8 @@
 # Databoarder
 
-Ask a business question, upload a CSV, get a plain-language A/B test report.
+**Reusable analysis that anyone can check and re-run.**
+
+Ask a business question, upload a CSV, and get a plain-language answer with the checks behind it. Every report comes with a script that reproduces each number from the raw file. Covers A/B tests, before/after changes (with or without a comparison group), and comparisons where people chose for themselves.
 
 ## Screenshots
 (Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
