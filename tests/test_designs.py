@@ -162,3 +162,14 @@ def test_lalonde_observational_is_honest_about_poor_overlap():
     assert rep.effect["ci_low"] <= 1794 <= rep.effect["ci_high"]   # adjusted range reaches the randomized answer
     assert rep.verdict != "clear_difference" or rep.effect["diff"] > 0   # never a confident wrong-signed claim
     assert rep.review_items                                       # and it warns: overlap is poor / checks disagree
+
+
+def test_poor_overlap_is_said_up_front():
+    import os
+    if not os.path.exists("sample_data/lalonde_cps.csv"):
+        pytest.skip("sample missing")
+    df = pd.read_csv("sample_data/lalonde_cps.csv")
+    spec = ObservationalSpec(group_col="trained", control="no", treatment="yes", outcome_col="re78",
+                             covariates=["age", "educ", "black", "hisp", "marr", "nodegree", "re74", "re75"])
+    assert "truly alike" in analyze(df, spec).how_sure
+    assert "truly alike" not in analyze(LOY, obs_spec()).how_sure
