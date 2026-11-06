@@ -2,6 +2,21 @@
 
 Ask a business question, upload a CSV, get a plain-language A/B test report.
 
+## Screenshots
+(Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
+
+**Set-up: the "How did people get it?" step picks the method**
+![Setup](docs/screenshots/1-setup.png)
+
+**Comparison group (difference-in-differences), "Right answer" mode with cross-checks**
+![Comparison group report](docs/screenshots/3-comparison-group-report.png)
+
+**People chose: adjusted comparison, worded as "goes with", with a hidden-factor note**
+![People chose report](docs/screenshots/2-people-chose-report.png)
+
+**A/B test, "Quick" mode**
+![A/B test](docs/screenshots/4-ab-test-quick.png)
+
 ## Run
     python -m pip install -r requirements.txt
     export ANTHROPIC_API_KEY=...   # optional; without it, columns are guessed from names
