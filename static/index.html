@@ -34,6 +34,11 @@
   .ic.b { background: var(--blue-soft); } .ic.k { background: var(--pink-soft); } .ic.o { background: var(--orange-soft); }
   .hidden { display: none !important; }
   .muted { color: var(--muted); }
+  .how { margin: -6px 0 16px; font-size: 14.5px; font-weight: 700; color: var(--muted); line-height: 1.45; }
+  .how b { color: var(--ink); }
+  details.privacy { margin-top: 14px; font-size: 14px; font-weight: 700; }
+  details.privacy summary { cursor: pointer; color: var(--purple); }
+  details.privacy ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
   .linkish { color: var(--purple); font-weight: 800; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; font-weight: 800; }
   .linkish:hover { text-decoration: underline; }
 
@@ -168,7 +173,8 @@
   </header>
 
   <section class="card" id="s1">
-    <p class="title"><span class="ic y">📂</span> Your data</p>
+    <p class="title"><span class="ic y">📂</span> Step 1: Add the data you want to analyze</p>
+    <p class="how">Use a spreadsheet saved as a <b>CSV</b> file, with one row per person, order or day. We'll tidy obvious formatting problems and <b>tell you exactly what we changed</b>.</p>
     <div id="drop" class="drop">
       <div class="big">📄</div>
       <div>Drop a CSV here, or <button class="linkish" id="pick">browse</button></div>
@@ -177,20 +183,28 @@
     <div id="fileinfo" class="hidden"></div>
     <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🛒 A/B test sample</button> · <button class="linkish" id="sample2">📅 Before/after sample</button> · <button class="linkish" id="sample3">🗺️ Pilot vs holdout sample</button> · <button class="linkish" id="sample4">💳 People chose sample</button></div>
     <div id="err1" class="err"></div>
+    <details class="privacy"><summary>🔒 What happens to my data?</summary><ul>
+      <li>Your file is kept in the server's memory while you work. It isn't saved to a database, and it's dropped when the app restarts or newer uploads push it out.</li>
+      <li>The statistics are done by fixed, tested code. The AI never does the math.</li>
+      <li>Only if you type your own question, the AI sees your <b>column names, their types and up to six example values per column</b>. It never sees your full file or your results. Picking a prepared question sends nothing to the AI.</li>
+      <li>Avoid uploading sensitive data to a shared demo.</li></ul></details>
   </section>
 
   <section class="card hidden" id="s2">
-    <p class="title"><span class="ic g">🎚️</span> How careful?</p>
+    <p class="title"><span class="ic g">🎚️</span> Step 2: How careful do you need to be?</p>
+    <p class="how">Same method every time. A higher level just <b>adds more double-checks</b> and takes a little longer. Pick <b>Quick</b> for a first look and the others when a decision depends on it.</p>
     <div class="modes" id="modes"></div>
   </section>
 
   <section class="card hidden" id="s2b">
-    <p class="title"><span class="ic p">🧭</span> How did people get it?</p>
+    <p class="title"><span class="ic p">🧭</span> Step 3: How did people end up with the change?</p>
+    <p class="how">This decides which comparison is <b>fair</b>. A coin-flip split can show cause and effect. Comparing people who chose for themselves can only show what <b>goes with</b> what. Not sure? Say so, and we'll use the cautious wording.</p>
     <div class="designs" id="designs"></div>
   </section>
 
   <section class="card hidden" id="s3">
-    <p class="title"><span class="ic b">💬</span> Your question</p>
+    <p class="title"><span class="ic b">💬</span> Step 4: What do you want to know?</p>
+    <p class="how">Pick a ready-made question built from your own columns, or type your own. <b>You'll check how we understood it in the next step</b> before anything runs.</p>
     <div id="qlist"></div>
     <textarea id="qother" class="hidden" placeholder="Type your question…"></textarea>
     <div class="row"><button class="btn" id="go">Go</button></div>
@@ -198,7 +212,8 @@
   </section>
 
   <section class="card hidden" id="s4">
-    <p class="title"><span class="ic k">👀</span> Is this right?</p>
+    <p class="title"><span class="ic k">👀</span> Step 5: Check we understood you</p>
+    <p class="how">This sentence is written by the program from the choices below it, <b>not by the AI</b>. If anything is off, press Change and fix it. Nothing has been calculated yet.</p>
     <div class="readback" id="readback"></div>
     <div id="notes"></div>
     <div class="row">
@@ -546,6 +561,7 @@ function renderReport(r) {
       : `<div class="banner good">🏅 All checks clean. ${esc(r.robust_summary.replace(/^Holds up( so far)?:\s*/, "").replace(/^./, (c) => c.toUpperCase()))}</div>`;
   }
 
+  h += `<p class="title" style="margin:6px 0 4px"><span class="ic g">🎯</span> Step 6: Here's your answer</p><p class="how">What we found, how sure we are, and what we <b>can't</b> tell you. Cause and effect is only claimed when the setup allows it.</p>`;
   h += `<div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h2>${esc(r.headline)}</h2><p>${esc(r.answer)}</p>${r.how_sure ? `<p class="sure">${esc(r.how_sure)}</p>` : ""}</div></div>`;
 
   if (r.prep && r.prep.length) h += `<div class="adj">🧹 Tidied before analysis: ${r.prep.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>`;
@@ -596,6 +612,7 @@ function renderReport(r) {
       <div class="row" style="margin-top:14px"><button class="btn soft" id="copyscript">📋 Copy script</button><button class="btn soft" id="dlscript">⬇️ Download .py</button></div>
       <pre id="script">${esc(r.script)}</pre>` : `<p class="muted">Nothing ran.</p>`;
 
+  h += `<p class="title" style="margin:22px 0 4px"><span class="ic p">🔎</span> Step 7: Check it, or run it yourself</p><p class="how"><b>Checks</b> shows every safety test we ran. <b>Method</b> explains each number in plain words, and <b>Reproduce</b> gives a script anyone can run on the original file to get the same numbers.</p>`;
   h += `<div class="card"><div class="tabbar" data-g="main"><button class="tab on" data-t="checks">🩺 Checks</button><button class="tab" data-t="method">🧰 Method</button></div>
     <div class="panel" data-g="main" data-t="checks">${checks}
       ${r.causal_label ? `<div class="box"><b>🎲 Cause?</b>${esc(r.causal_label)}</div>` : ""}
