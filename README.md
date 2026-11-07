@@ -4,6 +4,17 @@
 
 Ask a business question, upload a CSV, and get a plain-language answer with the checks behind it. Every report comes with a script that reproduces each number from the raw file. Covers A/B tests, before/after changes (with or without a comparison group), and comparisons where people chose for themselves.
 
+## How it works, step by step
+1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed.
+2. **How careful do you need to be?** The method is the same every time. Higher levels add more double-checks.
+3. **How did people end up with the change?** Random split, everyone from a date, some never got it, or they chose. This decides which comparison is fair and how strongly the answer can be worded.
+4. **What do you want to know?** Pick a ready-made question built from your own columns, or type one.
+5. **Check we understood you.** A sentence written by the program (not the AI) says what will be compared. Fix anything that's off before anything runs. Exception: in Quick mode, a ready-made question runs straight away and shows this sentence as "Assumed" above the answer, with a Change button. Typed questions are always confirmed first.
+6. **Here's your answer.** What was found, how sure we are, and what can't be told from this data.
+7. **Check it, or run it yourself.** Every check, a plain-words explanation of each number, and a script that reproduces the numbers from the raw file.
+
+**What the AI does and doesn't do:** it only turns a typed question into the form in step 5, seeing column names, types and up to six example values per column. All statistics come from fixed, tested code.
+
 ## Screenshots
 (Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
 
