@@ -1,7 +1,7 @@
 # Plan: Seamless data ingestion
 
-Status: step 1 in progress. File reading, the recipe and the frozen table exist in `app/ingest.py`, with
-no routes or screens yet. Written 2026-11-09 against `main` at `23df680`.
+Status: step 1 in progress. Upload routes, the review screen and hand-built recipes work. AI-proposed
+recipes, the question flow from confirmed answers, and masking identifiers are not built. Written 2026-11-09 against `main` at `23df680`.
 Line numbers below are from that commit and may drift.
 
 ## The problem

@@ -376,6 +376,22 @@ OPERATIONS = {"read_table": _read_table, "choose_columns": _choose_columns, "sta
               "count_within_window": _count_within_window}
 
 
+def run_steps(recipe, folder):
+    """Carries out the steps in order. If one fails, the error says which, and holds the work so far."""
+    tables, log = {}, []
+    for number, step in enumerate(recipe["steps"], 1):
+        try:
+            name, rows_before, note = OPERATIONS[step["op"]](step, tables, folder)
+        except Exception as cause:
+            error = cause if isinstance(cause, RecipeError) else RecipeError(
+                f"This step couldn't be carried out ({type(cause).__name__}). Check the columns it uses.")
+            error.step, error.tables, error.log = number, tables, log
+            raise error
+        log.append({"step": number, "table": name, "rows_before": rows_before,
+                    "rows_after": len(tables[name]), "note": note})
+    return tables, log
+
+
 def run_recipe(recipe, folder):
     """Runs a confirmed recipe. Returns the final table and, for each step, what it did to the row count."""
     waiting = [number for number, step in enumerate(recipe["steps"], 1) if step.get("status") != "confirmed"]
@@ -383,11 +399,7 @@ def run_recipe(recipe, folder):
         label = "Steps" if len(waiting) > 1 else "Step"
         verb = "need" if len(waiting) > 1 else "needs"
         raise RecipeError(f"{label} {', '.join(map(str, waiting))} still {verb} your confirmation before this can run.")
-    tables, log = {}, []
-    for number, step in enumerate(recipe["steps"], 1):
-        name, rows_before, note = OPERATIONS[step["op"]](step, tables, folder)
-        log.append({"step": number, "table": name, "rows_before": rows_before,
-                    "rows_after": len(tables[name]), "note": note})
+    tables, log = run_steps(recipe, folder)
     return _table(tables, recipe["output"]).reset_index(drop=True), log
 
 

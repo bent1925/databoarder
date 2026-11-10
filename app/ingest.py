@@ -14,7 +14,7 @@ from typing import Optional
 
 import pandas as pd
 
-from .recipe_ops import RecipeError, freeze, read_grid, run_recipe, table_from_grid
+from .recipe_ops import RecipeError, freeze, read_grid, run_recipe, run_steps, table_from_grid
 from .schemas import DataRecipe
 
 RUNTIME_SOURCE = Path(__file__).with_name("recipe_ops.py")
@@ -163,11 +163,74 @@ def require_comparison(table: pd.DataFrame, group_column: str) -> None:
                           "or include data from before it started.")
 
 
+def require_one_row_per_unit(table: pd.DataFrame, unit_column: str) -> None:
+    """The methods assume each row is one person, order or day. Repeats would make results look too certain."""
+    if unit_column not in table.columns:
+        raise RecipeError(f"The final table has no column called '{unit_column}'.")
+    values = table[unit_column]
+    if values.isna().any():
+        raise RecipeError(f"{int(values.isna().sum()):,} rows have no '{unit_column}'. Filter them out or roll them up.")
+    repeats = int(values.duplicated().sum())
+    if repeats:
+        raise RecipeError(f"'{unit_column}' repeats, with {repeats:,} extra rows, so the table isn't one row per "
+                          f"'{unit_column}'. Add a roll-up step, because repeated rows make results look more certain "
+                          "than they are.")
+
+
+def require_time_span(table: pd.DataFrame, time_column: str) -> None:
+    """Without a comparison group, a before-and-after comparison needs more than one date."""
+    if time_column not in table.columns:
+        raise RecipeError(f"The final table has no column called '{time_column}'.")
+    dates = pd.to_datetime(table[time_column], errors="coerce", format="mixed").dropna().dt.normalize()
+    if dates.nunique() < 2:
+        raise RecipeError(f"'{time_column}' doesn't hold at least two different dates, so there's nothing to compare. "
+                          "Ask your analyst to include people who didn't get the campaign, or data from before it started.")
+
+
+def suggest_read_steps(found: list[FoundTable]) -> list[dict]:
+    """One proposed step per table found. These are guesses written by code, for the person to check."""
+    steps, used = [], set()
+    per_file = [item.file for item in found]
+    for item in found:
+        sheet = f"_{item.sheet}" if item.sheet and per_file.count(item.file) > 1 else ""
+        base = re.sub(r"\W+", "_", Path(item.file).stem + sheet).strip("_") or "table"
+        name, number = base, 2
+        while name in used:
+            name, number = f"{base}_{number}", number + 1
+        used.add(name)
+        steps.append({"op": "read_table", "status": "proposed", "file": item.file, "sheet": item.sheet,
+                      "delimiter": item.delimiter, "header_row": item.header_row, "footer_rows": item.footer_rows,
+                      "into": name})
+    return steps
+
+
+def preview_recipe(recipe: DataRecipe, folder: Path, sample_rows: int = 20) -> dict:
+    """Shows what the steps would do, confirmed or not. Nothing is frozen or analyzed from a preview."""
+    dumped = recipe.model_dump()
+    for step in dumped["steps"]:
+        step["status"] = "confirmed"
+    error, failed_step = None, None
+    try:
+        tables, log = run_steps(dumped, Path(folder))
+    except RecipeError as problem:
+        tables, log, error, failed_step = problem.tables, problem.log, str(problem), problem.step
+    final = tables.get(recipe.output) if error is None else None
+    sample = None
+    if final is not None:
+        head = final.head(sample_rows)
+        sample = head.astype(object).where(head.notna(), None).to_dict("records")
+    return {"texts": [describe(step) for step in recipe.steps], "log": log, "error": error, "failed_step": failed_step,
+            "tables": {name: list(table.columns) for name, table in tables.items()},
+            "rows": None if final is None else len(final), "columns": None if final is None else list(final.columns),
+            "sample": sample}
+
+
 def script_block(recipe: DataRecipe, snapshot_name: str = "analysis_table.csv") -> str:
     """A standalone section of Python that rebuilds the frozen table from the original files."""
     dumped = recipe.model_dump()
     steps = "\n".join(f"# {number}. {_one_line(describe(step))}" for number, step in enumerate(recipe.steps, 1))
-    return (f"# --- Building the analysis table from the original files ---\n{steps}\n\n"
+    return (f"# --- Building the analysis table from the original files ---\n"
+            f"# Run this script in a folder that holds the original files.\n{steps}\n\n"
             f"{RUNTIME_SOURCE.read_text()}\n\n"
             f"RECIPE = {pprint.pformat(dumped, sort_dicts=False)}\n\n"
             f"_table, _log = run_recipe(RECIPE, '.')\n"

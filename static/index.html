@@ -163,6 +163,20 @@
   .covchip.on { background: var(--green-soft); } .covchip input { accent-color: var(--ink); }
   .adj { font-size: 14px; font-weight: 800; margin: -6px 0 18px; }
   .adj .chip { margin: 2px 4px 2px 0; }
+  input[type=text], input[type=number] { width: 100%; padding: 8px 10px; border-radius: 12px; border: 2.5px solid var(--ink); background: #fff; color: var(--ink); font: inherit; font-weight: 700; }
+  input[type=text]:focus, input[type=number]:focus { outline: 3px solid var(--yellow); outline-offset: 1px; }
+  .mstep { border: 2.5px solid var(--line); border-radius: 16px; padding: 10px 12px; margin-bottom: 8px; display: flex; gap: 10px; }
+  .mstep.ok { border-color: var(--green); background: #f4fdf9; } .mstep.bad { border-color: var(--pink); background: var(--pink-soft); }
+  .mstep .body { flex: 1; min-width: 0; font-weight: 700; font-size: 14.5px; }
+  .mstep .tag { font-size: 12px; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .mstep small { display: block; color: var(--muted); font-weight: 700; font-size: 13px; }
+  .mstep .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; font-size: 14px; }
+  .mform { border: 2.5px solid var(--ink); border-radius: 18px; padding: 14px 16px; margin-top: 12px; background: var(--yellow-soft); }
+  .mform .help { font-size: 12.5px; color: var(--muted); font-weight: 700; margin-top: 3px; }
+  .mfield { margin-bottom: 10px; }
+  .mrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .mrow select, .mrow input { width: auto; flex: 1 1 130px; }
+  .mhead { font-weight: 900; margin: 18px 0 6px; }
 </style>
 </head>
 <body>
@@ -182,12 +196,37 @@
     </div>
     <div id="fileinfo" class="hidden"></div>
     <div class="row" id="trysample"><span class="muted">No file?</span> <button class="linkish" id="sample">🛒 A/B test sample</button> · <button class="linkish" id="sample2">📅 Before/after sample</button> · <button class="linkish" id="sample3">🗺️ Pilot vs holdout sample</button> · <button class="linkish" id="sample4">💳 People chose sample</button></div>
+    <div class="row" id="openm"><span class="muted">Several files, or a messy Excel export?</span> <button class="linkish" id="openmerge">🧩 Put them together first</button></div>
     <div id="err1" class="err"></div>
     <details class="privacy"><summary>🔒 What happens to my data?</summary><ul>
-      <li>Your file is kept in the server's memory while you work. It isn't saved to a database, and it's dropped when the app restarts or newer uploads push it out.</li>
+      <li>A single CSV is kept in the server's memory while you work. It isn't saved to a database, and it's dropped when the app restarts or newer uploads push it out.</li>
+      <li>Files you put together are saved in a temporary folder on the server, and deleted after 6 hours or when newer uploads push them out, whichever comes first.</li>
       <li>The statistics are done by fixed, tested code. The AI never does the math.</li>
       <li>Only if you type your own question, the AI sees your <b>column names, their types and up to six example values per column</b>. It never sees your full file or your results. Picking a prepared question sends nothing to the AI.</li>
       <li>Avoid uploading sensitive data to a shared demo.</li></ul></details>
+  </section>
+
+  <section class="card hidden" id="m1">
+    <p class="title"><span class="ic o">🧩</span> Put your files together</p>
+    <p class="how">Add everything your analyst sent, as <b>CSV or Excel</b>. Each step below is shown in plain words, with how many rows it keeps or loses. <b>Nothing is used until you've confirmed every step.</b></p>
+    <div id="mdrop" class="drop">
+      <div class="big">🗂️</div>
+      <div>Drop your files here, or <button class="linkish" id="mpick">browse</button></div>
+      <input type="file" id="mfile" accept=".csv,.xlsx" multiple class="hidden">
+    </div>
+    <div id="mfound"></div>
+    <div id="mbody" class="hidden">
+      <div class="mhead">The steps</div>
+      <div class="legend">💡 suggested, not yet confirmed · ✅ you confirmed it</div>
+      <div id="msteps"></div>
+      <div class="row"><select id="maddop" style="max-width:320px"></select><button class="btn soft" id="maddbtn">➕ Add step</button></div>
+      <div id="mform"></div>
+      <div id="mstatus" class="muted" style="margin-top:10px"></div>
+      <div id="merr" class="err"></div>
+      <div id="mpreview"></div>
+      <div id="mfinish"></div>
+    </div>
+    <div id="merr2" class="err"></div>
   </section>
 
   <section class="card hidden" id="s2">
@@ -284,11 +323,15 @@ async function upload(file) {
   const fd = new FormData(); fd.append("file", file);
   try { state.ds = await api("/api/upload", { method: "POST", body: fd }); }
   catch (e) { $("err1").textContent = "😕 " + e.message; return; }
+  await showDataset();
+}
+
+async function showDataset() {
   const d = state.ds, cols = d.columns.map((c) => c.name);
-  $("drop").classList.add("hidden"); $("trysample").classList.add("hidden");
+  $("drop").classList.add("hidden"); $("trysample").classList.add("hidden"); $("openm").classList.add("hidden");
   $("fileinfo").classList.remove("hidden");
-  $("fileinfo").innerHTML = `<span class="chip">📄 ${esc(d.name)}</span><span class="chip">${d.rows.toLocaleString()} rows</span><span class="chip">${cols.length} columns</span>
-    <button class="linkish" id="togglePrev">👀 Peek</button> · <button class="linkish" id="swap">🔄 Other file</button>
+  $("fileinfo").innerHTML = `<span class="chip">📄 ${esc(d.name)}</span><span class="chip">${d.rows.toLocaleString()} rows</span><span class="chip">${cols.length} columns</span>${d.source ? `<span class="chip">🧩 Built from ${d.source.inputs.length} file${d.source.inputs.length === 1 ? "" : "s"}</span>` : ""}
+    <button class="linkish" id="togglePrev">👀 Peek</button> · ${d.source ? `<a class="linkish" href="/api/datasets/${encodeURIComponent(d.dataset_id)}/snapshot" download>⬇️ Download table</a> · ` : ""}<button class="linkish" id="swap">🔄 Other file</button>
     <div id="prev" class="scroll hidden" style="margin-top:12px"><table class="preview"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
     <tbody>${d.preview.map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   const pr = d.prep || { steps: [], notes: [] };
@@ -297,6 +340,259 @@ async function upload(file) {
   $("swap").onclick = () => location.reload();
   $("s2").classList.remove("hidden"); $("s2b").classList.remove("hidden"); $("s3").classList.remove("hidden");
   renderModes(); renderDesigns(); await loadQuestions();
+}
+
+/* ---------- 1b put files together ---------- */
+const M = { id: null, steps: [], tables: {}, texts: [], log: [], error: null, failed: null, edit: null, output: "",
+            rows: null, columns: [], sample: null, unit: "", compare: "group", groupCol: "", timeCol: "", run: 0 };
+const WINDOW_HOW = [["any_event", "Yes or no: any event"], ["count_rows", "How many events"], ["sum", "Total of a column"]];
+const ROLL_HOW = [["sum", "Total"], ["mean", "Average"], ["max", "Largest"], ["min", "Smallest"], ["any_positive", "Yes or no: any above zero"], ["count_rows", "How many rows"]];
+const DATE_ORDER = [["month_first", "Month first (03/04 is March 4)"], ["day_first", "Day first (03/04 is April 3)"]];
+const OPS = {
+  read_table: { label: "Read a file", hidden: true, fields: [
+    { k: "header_row", label: "Column names are on row", t: "rownum", help: "Skips title rows above the real column names." },
+    { k: "footer_rows", label: "Rows to leave out at the bottom", t: "number", help: "Such as a total line. These rows won't be counted as data." },
+    { k: "into", label: "Call this table", t: "text" }] },
+  clean_key: { label: "Clean up IDs so they match", why: "Makes the same customer match when files write them differently, like C-00123 and 123.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "column", label: "ID column", t: "column", of: "table" },
+    { k: "rule", label: "How", t: "choice", opts: [["digits_only", "Keep only the digits"], ["trim", "Trim spaces"], ["lowercase", "Trim spaces and use lowercase"]] },
+    { k: "into", label: "Name for the cleaned column", t: "text" }] },
+  match: { label: "Bring in columns from another table", why: "Rows without a match are kept, and the step shows how many matched.", fields: [
+    { k: "left", label: "Add columns to", t: "table" }, { k: "left_key", label: "Using its ID column", t: "column", of: "left" },
+    { k: "right", label: "From table", t: "table" }, { k: "right_key", label: "Using its ID column", t: "column", of: "right" },
+    { k: "bring", label: "Columns to bring in", t: "map", of: "right" }] },
+  flag_membership: { label: "Mark who is on a list", why: "For example, mark who is on the email list. Anyone not on it gets the second value.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "key", label: "Its ID column", t: "column", of: "table" },
+    { k: "other", label: "The list", t: "table" }, { k: "other_key", label: "The list's ID column", t: "column", of: "other" },
+    { k: "into", label: "Name for the new column", t: "text" }, { k: "yes", label: "Value if on the list", t: "text" }, { k: "no", label: "Value if not on the list", t: "text" }] },
+  roll_up: { label: "Roll up to one row per ID", why: "Use this when someone has several rows, such as one per order.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "by", label: "One row per", t: "column", of: "table" },
+    { k: "measures", label: "What to work out", t: "measures", of: "table", how: ROLL_HOW },
+    { k: "into", label: "Name for the new table", t: "text" }] },
+  count_within_window: { label: "Measure results in a time window", why: "Counts only what happened from each person's start date through the days you choose.", fields: [
+    { k: "table", label: "Table of people", t: "table" }, { k: "key", label: "Its ID column", t: "column", of: "table" },
+    { k: "start_column", label: "Start date column", t: "column", of: "table" },
+    { k: "default_start", label: "Start date for people without one (optional)", t: "text", optional: true, help: "People who weren't sent anything have no start date. Give the campaign date (like 2024-03-01) so they can be compared. Otherwise their results stay empty." },
+    { k: "events", label: "Table of events", t: "table" }, { k: "event_key", label: "Its ID column", t: "column", of: "events" },
+    { k: "event_date", label: "Its date column", t: "column", of: "events" },
+    { k: "days", label: "Days to count, including the start day", t: "number", help: "This changes the answer. A longer window catches more results, but also more that had nothing to do with the campaign." },
+    { k: "measures", label: "What to work out", t: "measures", of: "events", how: WINDOW_HOW },
+    { k: "no_events_value", label: "Value for someone with no events", t: "text", help: "Usually 0, if no purchase row really means no purchase. If rows could be missing because of a failed match, 0 would be wrong." },
+    { k: "date_order", label: "Dates like 03/04/2024 (optional)", t: "choice", opts: DATE_ORDER, optional: true }] },
+  fill_missing: { label: "Fill in empty values", why: "This changes results, so only fill in a value when you know what an empty cell means.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "column", label: "Column", t: "column", of: "table" },
+    { k: "value", label: "Treat empty as", t: "text" }] },
+  filter: { label: "Keep only some rows", why: "The step shows how many rows this removes.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "column", label: "Column", t: "column", of: "table" },
+    { k: "test", label: "Keep rows where it", t: "choice", opts: [["equals", "Equals"], ["not_equals", "Doesn't equal"], ["starts_with", "Starts with"], ["not_starts_with", "Doesn't start with"], ["greater_than", "Is more than"], ["at_least", "Is at least"], ["less_than", "Is less than"], ["at_most", "Is at most"]] },
+    { k: "value", label: "Value", t: "text" },
+    { k: "compare_as", label: "Compare as (for more than or less than)", t: "choice", opts: [["number", "Numbers"], ["date", "Dates"]], optional: true },
+    { k: "date_order", label: "Dates like 03/04/2024 (optional)", t: "choice", opts: DATE_ORDER, optional: true }] },
+  calculate: { label: "Calculate a new column", why: "For example, quantity times price.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "first", label: "First column", t: "column", of: "table" },
+    { k: "operation", label: "Do", t: "choice", opts: [["multiply", "Multiply by"], ["add", "Add"], ["subtract", "Subtract"], ["divide", "Divide by"]] },
+    { k: "second", label: "Second column", t: "column", of: "table" }, { k: "into", label: "Name for the new column", t: "text" }] },
+  stack: { label: "Stack tables on top of each other", why: "For tables with the same columns, such as one sheet per year. Check they don't overlap, or rows get counted twice.", fields: [
+    { k: "tables", label: "Tables to stack", t: "list" }, { k: "into", label: "Name for the new table", t: "text" }] },
+  reshape_long: { label: "Turn date columns into rows", why: "For tables with one column per date or item.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "id_columns", label: "Columns to keep as they are", t: "list", of: "table" },
+    { k: "value_columns", label: "Columns to turn into rows", t: "list", of: "table" },
+    { k: "names_to", label: "Name for the column holding their names", t: "text" },
+    { k: "values_to", label: "Name for the column holding their values", t: "text" }, { k: "into", label: "Name for the new table", t: "text" }] },
+  choose_columns: { label: "Keep or rename columns", why: "Only the ticked columns are kept.", fields: [
+    { k: "table", label: "Table", t: "table" }, { k: "columns", label: "Columns to keep", t: "map", of: "table" }] },
+};
+
+const outFor = (s) => s.into || s.table || s.left;
+const outputName = () => M.output || (M.steps.length ? outFor(M.steps[M.steps.length - 1]) : "");
+const recipe = () => ({ steps: M.steps, output: outputName() });
+const colsOf = (name) => M.tables[name] || [];
+const option = (v, label, cur) => `<option value="${esc(v)}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${esc(label ?? v)}</option>`;
+const selectHtml = (attr, options, cur) => `<select ${attr}>${option("", "Choose…", cur)}${options.map((o) => (Array.isArray(o) ? option(o[0], o[1], cur) : option(o, o, cur))).join("")}</select>`;
+
+$("openmerge").onclick = () => { $("m1").classList.remove("hidden"); $("m1").scrollIntoView({ behavior: "smooth", block: "start" }); };
+$("mpick").onclick = () => $("mfile").click();
+$("mdrop").onclick = (e) => { if (e.target.id !== "mpick") $("mfile").click(); };
+$("mfile").onchange = (e) => e.target.files.length && addFiles([...e.target.files]);
+["dragover", "dragenter"].forEach((t) => $("mdrop").addEventListener(t, (e) => { e.preventDefault(); $("mdrop").classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => $("mdrop").addEventListener(t, (e) => { e.preventDefault(); $("mdrop").classList.remove("over"); }));
+$("mdrop").addEventListener("drop", (e) => e.dataTransfer.files.length && addFiles([...e.dataTransfer.files]));
+$("maddop").innerHTML = Object.entries(OPS).filter(([, o]) => !o.hidden).map(([k, o]) => option(k, o.label)).join("");
+$("maddbtn").onclick = () => { M.edit = { index: null, step: { op: $("maddop").value } }; renderForm(); };
+
+async function addFiles(files) {
+  $("merr2").textContent = "";
+  $("mfound").innerHTML = `<p class="muted"><span class="spin"></span>Reading your files. Large Excel files can take a minute.</p>`;
+  const fd = new FormData(); files.forEach((f) => fd.append("files", f));
+  let got;
+  try { got = await api("/api/sources", { method: "POST", body: fd }); }
+  catch (e) { $("mfound").innerHTML = ""; $("merr2").textContent = "😕 " + e.message; return; }
+  M.id = got.source_id; M.steps = got.steps; M.output = ""; M.edit = null;
+  $("mdrop").classList.add("hidden"); $("mbody").classList.remove("hidden");
+  $("mfound").innerHTML = `<div class="mhead">What we found</div>` + got.tables.map((t) => `<span class="chip">📄 ${esc(t.file)}${t.sheet ? " · " + esc(t.sheet) : ""} · ${t.rows.toLocaleString()} rows · ${t.columns.length} columns</span>`).join("");
+  await refresh();
+}
+
+function clearConfirmFrom(index) { M.steps.slice(index).forEach((s) => { s.status = "proposed"; }); }
+
+async function refresh() {
+  const run = ++M.run;
+  $("merr").textContent = ""; $("mstatus").innerHTML = `<span class="spin"></span>Working out what these steps do…`;
+  try {
+    const p = await post(`/api/sources/${M.id}/preview`, { recipe: recipe() });
+    if (run !== M.run) return;
+    Object.assign(M, { tables: p.tables, texts: p.texts, log: p.log, error: p.error, failed: p.failed_step, rows: p.rows, columns: p.columns || [], sample: p.sample });
+  } catch (e) {
+    if (run !== M.run) return;
+    M.error = e.message; M.failed = null; M.rows = null; M.columns = []; M.sample = null;
+  }
+  $("mstatus").textContent = "";
+  renderSteps(); renderPreview(); renderFinish(); renderForm();
+}
+
+function renderSteps() {
+  $("msteps").innerHTML = M.steps.map((s, i) => {
+    const ok = s.status === "confirmed", bad = M.failed === i + 1, log = M.log[i];
+    let counts = "";
+    if (log) counts = log.rows_before ? `${log.rows_before.toLocaleString()} rows → ${log.rows_after.toLocaleString()} rows` : `${log.rows_after.toLocaleString()} rows`;
+    return `<div class="mstep ${ok ? "ok" : ""} ${bad ? "bad" : ""}"><div class="s">${bad ? "❌" : ok ? "✅" : "💡"}</div><div class="body">
+      <div class="tag">Step ${i + 1} · ${ok ? "Confirmed" : "Suggested"}</div>${esc(M.texts[i] || OPS[s.op].label)}
+      ${counts ? `<small>📊 ${esc(counts)}</small>` : ""}${log && log.note ? `<small>${esc(log.note)}</small>` : ""}${bad ? `<small style="color:#c0245f">${esc(M.error)}</small>` : ""}
+      <div class="acts"><button class="linkish" data-act="toggle" data-i="${i}">${ok ? "↩️ Undo" : "✅ Confirm"}</button><button class="linkish" data-act="edit" data-i="${i}">✏️ Edit</button><button class="linkish" data-act="remove" data-i="${i}">🗑️ Remove</button></div>
+    </div></div>`;
+  }).join("");
+  $("msteps").querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => {
+    const i = Number(b.dataset.i);
+    if (b.dataset.act === "toggle") { const on = M.steps[i].status === "confirmed"; if (on) clearConfirmFrom(i); else M.steps[i].status = "confirmed"; renderSteps(); renderFinish(); }
+    else if (b.dataset.act === "edit") { M.edit = { index: i, step: JSON.parse(JSON.stringify(M.steps[i])) }; renderForm(); }
+    else { M.steps.splice(i, 1); clearConfirmFrom(i); M.output = ""; M.edit = null; refresh(); }
+  }));
+  if (M.error && !M.failed) $("merr").textContent = "😕 " + M.error;
+}
+
+function fieldHtml(f, s) {
+  const v = s[f.k];
+  if (f.t === "table") return selectHtml(`data-k="${f.k}" data-redraw="1"`, Object.keys(M.tables), v);
+  if (f.t === "column") return selectHtml(`data-k="${f.k}"`, colsOf(s[f.of]), v);
+  if (f.t === "choice") return selectHtml(`data-k="${f.k}"`, f.opts, v);
+  if (f.t === "text") return `<input type="text" data-k="${f.k}" value="${esc(v)}">`;
+  if (f.t === "number") return `<input type="number" min="0" data-k="${f.k}" data-num="1" value="${esc(v)}">`;
+  if (f.t === "rownum") return `<input type="number" min="1" data-k="${f.k}" data-row="1" value="${v === undefined ? "" : v + 1}">`;
+  if (f.t === "list") {
+    const chosen = v || [], options = f.of ? colsOf(s[f.of]) : Object.keys(M.tables);
+    return `<div class="covchips">${options.map((c) => `<label class="covchip ${chosen.includes(c) ? "on" : ""}"><input type="checkbox" data-list="${f.k}" value="${esc(c)}" ${chosen.includes(c) ? "checked" : ""}>${esc(c)}</label>`).join("")}</div>`;
+  }
+  if (f.t === "map") {
+    const chosen = v || {};
+    return colsOf(s[f.of]).map((c) => {
+      const on = Object.prototype.hasOwnProperty.call(chosen, c);
+      return `<div class="mrow"><label class="covchip ${on ? "on" : ""}"><input type="checkbox" data-map="${f.k}" value="${esc(c)}" ${on ? "checked" : ""}>${esc(c)}</label>${on ? `<span class="muted">as</span><input type="text" data-rename="${f.k}" data-col="${esc(c)}" value="${esc(chosen[c])}">` : ""}</div>`;
+    }).join("") || `<div class="muted">Choose a table first.</div>`;
+  }
+  const rows = v || [{ how: f.how[0][0], column: null, into: "" }];
+  s[f.k] = rows;
+  return rows.map((m, i) => `<div class="mrow">${selectHtml(`data-m="${f.k}" data-mi="${i}" data-mf="how" data-redraw="1"`, f.how, m.how)}
+    ${["count_rows", "any_event"].includes(m.how) ? "" : selectHtml(`data-m="${f.k}" data-mi="${i}" data-mf="column"`, colsOf(s[f.of]), m.column)}
+    <input type="text" placeholder="Name the result" data-m="${f.k}" data-mi="${i}" data-mf="into" value="${esc(m.into)}">
+    ${rows.length > 1 ? `<button class="linkish" data-mrm="${f.k}" data-mi="${i}">🗑️</button>` : ""}</div>`).join("") +
+    `<button class="linkish" data-madd="${f.k}">➕ Another result</button>`;
+}
+
+function renderForm() {
+  const root = $("mform");
+  if (!M.edit) { root.innerHTML = ""; return; }
+  const s = M.edit.step, spec = OPS[s.op];
+  root.innerHTML = `<div class="mform"><div class="mhead" style="margin-top:0">${esc(spec.label)}</div>${spec.why ? `<p class="how" style="margin:0 0 10px">${esc(spec.why)}</p>` : ""}
+    ${spec.fields.map((f) => `<div class="mfield"><label class="f">${esc(f.label)}</label>${fieldHtml(f, s)}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`).join("")}
+    <div id="mformerr" class="err"></div>
+    <div class="row"><button class="btn" id="msave">Save step</button><button class="linkish" id="mcancel">Cancel</button></div></div>`;
+  root.querySelectorAll("[data-k]").forEach((el) => {
+    el.onchange = el.oninput = () => {
+      const k = el.dataset.k, raw = el.value;
+      s[k] = el.dataset.num ? (raw === "" ? "" : Number(raw)) : el.dataset.row ? (raw === "" ? "" : Number(raw) - 1) : raw;
+      if (el.dataset.redraw) renderForm();
+    };
+  });
+  root.querySelectorAll("[data-list]").forEach((el) => (el.onchange = () => {
+    const k = el.dataset.list, cur = new Set(s[k] || []);
+    if (el.checked) cur.add(el.value); else cur.delete(el.value);
+    s[k] = [...cur]; renderForm();
+  }));
+  root.querySelectorAll("[data-map]").forEach((el) => (el.onchange = () => {
+    const k = el.dataset.map; s[k] = s[k] || {};
+    if (el.checked) s[k][el.value] = el.value; else delete s[k][el.value];
+    renderForm();
+  }));
+  root.querySelectorAll("[data-rename]").forEach((el) => (el.oninput = () => { s[el.dataset.rename][el.dataset.col] = el.value; }));
+  root.querySelectorAll("[data-m]").forEach((el) => {
+    el.onchange = el.oninput = () => {
+      const row = s[el.dataset.m][Number(el.dataset.mi)];
+      row[el.dataset.mf] = el.value || null;
+      if (el.dataset.mf === "how" && ["count_rows", "any_event"].includes(row.how)) row.column = null;
+      if (el.dataset.redraw) renderForm();
+    };
+  });
+  root.querySelectorAll("[data-madd]").forEach((b) => (b.onclick = () => { const f = spec.fields.find((x) => x.k === b.dataset.madd); s[f.k].push({ how: f.how[0][0], column: null, into: "" }); renderForm(); }));
+  root.querySelectorAll("[data-mrm]").forEach((b) => (b.onclick = () => { s[b.dataset.mrm].splice(Number(b.dataset.mi), 1); renderForm(); }));
+  $("mcancel").onclick = () => { M.edit = null; renderForm(); };
+  $("msave").onclick = saveStep;
+}
+
+function saveStep() {
+  const { index, step: s } = M.edit;
+  for (const f of OPS[s.op].fields) {
+    const v = s[f.k];
+    const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length) || (typeof v === "object" && !Array.isArray(v) && v && !Object.keys(v).length);
+    if (empty && f.optional) { delete s[f.k]; continue; }
+    if (empty) { $("mformerr").textContent = `😕 Please fill in "${f.label}".`; return; }
+    if (f.t === "measures" && v.some((m) => !m.into || (!["count_rows", "any_event"].includes(m.how) && !m.column))) {
+      $("mformerr").textContent = "😕 Each result needs a name and, for a total or average, a column."; return;
+    }
+  }
+  s.status = "proposed";
+  if (index === null) M.steps.push(s); else { M.steps[index] = s; clearConfirmFrom(index); }
+  M.edit = null; M.output = "";
+  refresh();
+}
+
+function renderPreview() {
+  if (!M.sample) { $("mpreview").innerHTML = ""; return; }
+  $("mpreview").innerHTML = `<div class="mhead">Preview of the final table: ${M.rows.toLocaleString()} rows, ${M.columns.length} columns</div>
+    <p class="how" style="margin:0 0 8px">First ${M.sample.length} rows. Nothing has been saved or analyzed yet.</p>
+    <div class="scroll"><table class="preview"><thead><tr>${M.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${M.sample.map((r) => `<tr>${M.columns.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderFinish() {
+  const root = $("mfinish"), waiting = M.steps.filter((s) => s.status !== "confirmed").length;
+  if (!M.steps.length) { root.innerHTML = ""; return; }
+  const ready = !waiting && !M.error && M.sample && M.unit && (M.compare === "group" ? M.groupCol : M.timeCol);
+  const pick = (id, cur) => selectHtml(`id="${id}"`, M.columns, cur);
+  root.innerHTML = `<div class="mhead">Finish</div>
+    <div class="mfield"><label class="f">Which table is the final one?</label>${selectHtml('id="m_output"', Object.keys(M.tables), outputName())}</div>
+    <div class="mfield"><label class="f">Each row is one…</label>${pick("m_unit", M.unit)}<div class="help">Pick the ID column. If it repeats, you'll be asked to roll up first, because repeated rows make results look more certain than they are.</div></div>
+    <label class="qopt ${M.compare === "group" ? "on" : ""}"><input type="radio" name="m_cmp" value="group" ${M.compare === "group" ? "checked" : ""}><span>A column says who got the campaign and who didn't</span></label>
+    <label class="qopt ${M.compare === "time" ? "on" : ""}"><input type="radio" name="m_cmp" value="time" ${M.compare === "time" ? "checked" : ""}><span>Everyone got it, and I have data from before and after</span></label>
+    <div class="mfield">${M.compare === "group" ? `<label class="f">Who got the campaign?</label>${pick("m_group", M.groupCol)}` : `<label class="f">Date column</label>${pick("m_time", M.timeCol)}`}</div>
+    <div class="row"><button class="btn" id="museit" ${ready ? "" : "disabled"}>✅ Use this table</button>${waiting ? `<span class="muted">${waiting} step${waiting === 1 ? "" : "s"} still to confirm</span>` : ""}</div>`;
+  $("m_output").onchange = (e) => { M.output = e.target.value; refresh(); };
+  $("m_unit").onchange = (e) => { M.unit = e.target.value; renderFinish(); };
+  const g = $("m_group"), t = $("m_time");
+  if (g) g.onchange = (e) => { M.groupCol = e.target.value; renderFinish(); };
+  if (t) t.onchange = (e) => { M.timeCol = e.target.value; renderFinish(); };
+  root.querySelectorAll('input[name="m_cmp"]').forEach((r) => (r.onchange = () => { M.compare = r.value; renderFinish(); }));
+  $("museit").onclick = finishMerge;
+}
+
+async function finishMerge() {
+  const btn = $("museit"); busy(btn, true, "Building your table…"); $("merr").textContent = "";
+  try {
+    state.ds = await post(`/api/sources/${M.id}/confirm`, { recipe: recipe(), unit_column: M.unit,
+      group_column: M.compare === "group" ? M.groupCol : null, time_column: M.compare === "time" ? M.timeCol : null });
+  } catch (e) { busy(btn, false); $("merr").textContent = "😕 " + e.message; return; }
+  $("m1").classList.add("hidden");
+  await showDataset();
+  $("s1").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /* ---------- 2 mode ---------- */
@@ -607,6 +903,8 @@ function renderReport(r) {
   const repro = r.audit.length ? `
       <div class="fp">🔖 Data fingerprint <code>${esc((rp.data_sha256 || "n/a").slice(0, 16))}</code> · ${(rp.rows_used || 0).toLocaleString()} rows${rp.weeks_used ? " · " + esc(rp.weeks_used) + " weeks" : ""} · seed ${esc(rp.seed)} ·
         ${Object.entries(ver).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(" · ")}</div>
+      ${rp.source ? `<div class="box" style="margin-bottom:14px"><b>🧩 How this table was built</b><ol style="margin:4px 0 0;padding-left:22px">${rp.source.steps.map((s) => `<li>${esc(s.text)} <span class="muted">${s.rows_before ? s.rows_before.toLocaleString() + " → " : ""}${s.rows_after.toLocaleString()} rows${s.note ? ". " + esc(s.note) : ""}</span></li>`).join("")}</ol>
+        <div class="cap">From ${rp.source.inputs.map((f) => `${esc(f.file)} (<code>${esc(f.sha256.slice(0, 12))}</code>)`).join(", ")}. The script below rebuilds this table, so run it in a folder with these files.</div></div>` : ""}
       <div class="scroll"><table><thead><tr><th>Number</th><th>How</th></tr></thead><tbody>
         ${r.audit.map((a) => `<tr><td>${esc(a.label)}</td><td>${esc(a.method)}<br><code>${esc(a.code)}</code></td></tr>`).join("")}</tbody></table></div>
       <div class="row" style="margin-top:14px"><button class="btn soft" id="copyscript">📋 Copy script</button><button class="btn soft" id="dlscript">⬇️ Download .py</button></div>
