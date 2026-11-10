@@ -416,6 +416,41 @@ def test_day_first_setting_does_not_swap_unambiguous_dates(tmp_path):
     assert build_table(plan, tmp_path).table["v"].tolist() == ["1", "2"]
 
 
+def _totals_then(tmp_path, **filter_step):
+    (tmp_path / "o.csv").write_text("id,amount\n1,4\n1,6\n2,0\n3,10.00\n4,10.5\n")
+    return recipe([{"op": "read_table", "file": "o.csv", "header_row": 0, "footer_rows": 0, "into": "o"},
+                   {"op": "roll_up", "table": "o", "by": "id", "into": "per",
+                    "measures": [{"how": "sum", "column": "amount", "into": "total"}]},
+                   {"op": "filter", "table": "per", "column": "total", **filter_step}], "per")
+
+
+@pytest.mark.parametrize("filter_step,kept", [
+    ({"test": "equals", "value": "10"}, ["1", "3"]),
+    ({"test": "not_equals", "value": "0"}, ["1", "3", "4"]),
+    ({"test": "starts_with", "value": "10"}, ["1", "3", "4"]),
+    ({"test": "equals", "value": "10.00"}, []),
+    ({"test": "equals", "value": "10.00", "compare_as": "number"}, ["1", "3"]),
+    ({"test": "not_equals", "value": "0.0", "compare_as": "number"}, ["1", "3", "4"]),
+])
+def test_equality_filters_work_on_numbers_made_by_earlier_steps(tmp_path, filter_step, kept):
+    assert build_table(_totals_then(tmp_path, **filter_step), tmp_path).table["id"].tolist() == kept
+
+
+def test_equality_filter_on_text_and_missing_values_is_unchanged(tmp_path):
+    (tmp_path / "t.csv").write_text("id,code\n1,10.0\n2,10\n3,\n")
+    plan = recipe([{"op": "read_table", "file": "t.csv", "header_row": 0, "footer_rows": 0, "into": "t"},
+                   {"op": "filter", "table": "t", "column": "code", "test": "not_equals", "value": "10"}], "t")
+    assert build_table(plan, tmp_path).table["id"].tolist() == ["1", "3"]
+
+
+def test_date_equality_uses_the_date_order(tmp_path):
+    (tmp_path / "d.csv").write_text("d,v\n03/04/2024,1\n2024-04-03,2\n2024-03-04,3\n")
+    plan = recipe([{"op": "read_table", "file": "d.csv", "header_row": 0, "footer_rows": 0, "into": "t"},
+                   {"op": "filter", "table": "t", "column": "d", "test": "equals", "value": "2024-04-03",
+                    "compare_as": "date", "date_order": "day_first"}], "t")
+    assert build_table(plan, tmp_path).table["v"].tolist() == ["1", "2"]
+
+
 def _date_filter(tmp_path, value, date_order):
     (tmp_path / "d.csv").write_text("d,v\n20/03/2024,1\n10/04/2024,2\n")
     return recipe([{"op": "read_table", "file": "d.csv", "header_row": 0, "footer_rows": 0, "into": "t"},

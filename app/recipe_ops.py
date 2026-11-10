@@ -176,27 +176,37 @@ def _clean_key(step, tables, folder):
     return step["table"], len(table), f"{_count(lost, 'value')} couldn't be read as an ID." if lost else ""
 
 
+def _number(value, column):
+    try:
+        return float(value)
+    except ValueError:
+        raise RecipeError(f"'{value}' isn't a number, so '{column}' can't be compared with it.")
+
+
 def _filter(step, tables, folder):
     table = _table(tables, step["table"])
     values = _column(table, step["column"], step["table"])
     test, target = step["test"], step["value"]
-    if test == "equals":
-        keep = values == target
-    elif test == "not_equals":
-        keep = values != target
+    written = values.map(_text)    # numbers made by earlier steps, written plainly: 10.0 becomes "10"
+    if test in ("equals", "not_equals"):
+        if step.get("compare_as") == "number":
+            same = pd.to_numeric(values, errors="coerce") == _number(target, step["column"])
+        elif step.get("compare_as") == "date":
+            same = (_dates(values, step["column"], step.get("date_order"))
+                    == _timestamp(target, "The date", step.get("date_order")))
+        else:
+            same = written == target
+        keep = same if test == "equals" else ~same    # an empty value never equals anything
     elif test == "starts_with":
-        keep = values.str.startswith(target, na=False)
+        keep = written.str.startswith(target, na=False)
     elif test == "not_starts_with":
-        keep = ~values.str.startswith(target, na=False)
+        keep = ~written.str.startswith(target, na=False)
     else:
         if step.get("compare_as") == "date":
             left = _dates(values, step["column"], step.get("date_order"))
             right = _timestamp(target, "The date", step.get("date_order"))
         elif step.get("compare_as") == "number":
-            try:
-                left, right = pd.to_numeric(values, errors="coerce"), float(target)
-            except ValueError:
-                raise RecipeError(f"'{target}' isn't a number, so '{step['column']}' can't be compared with it.")
+            left, right = pd.to_numeric(values, errors="coerce"), _number(target, step["column"])
         else:
             raise RecipeError(f"Filtering '{step['column']}' needs to say whether it compares numbers or dates.")
         keep = {"greater_than": left > right, "at_least": left >= right,

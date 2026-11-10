@@ -271,7 +271,9 @@ class CleanKey(_RecipeStep):
 
 class FilterRows(_RecipeStep):
     """Keeps only rows passing the test. equals, not_equals and the starts_with tests compare text exactly, including
-    case. The greater_than, at_least, less_than and at_most tests need compare_as set to number or date."""
+    case; numbers made by earlier steps are written plainly first, so 10.0 matches "10". With compare_as set to number
+    or date, equals and not_equals compare values instead, so 10.00 matches 10. An empty value never equals anything.
+    The greater_than, at_least, less_than and at_most tests need compare_as set to number or date."""
     op: Literal["filter"] = "filter"
     table: str
     column: str

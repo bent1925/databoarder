@@ -393,7 +393,7 @@ const OPS = {
     { k: "table", label: "Table", t: "table" }, { k: "column", label: "Column", t: "column", of: "table" },
     { k: "test", label: "Keep rows where it", t: "choice", opts: [["equals", "Equals"], ["not_equals", "Doesn't equal"], ["starts_with", "Starts with"], ["not_starts_with", "Doesn't start with"], ["greater_than", "Is more than"], ["at_least", "Is at least"], ["less_than", "Is less than"], ["at_most", "Is at most"]] },
     { k: "value", label: "Value", t: "text" },
-    { k: "compare_as", label: "Compare as (for more than or less than)", t: "choice", opts: [["number", "Numbers"], ["date", "Dates"]], optional: true },
+    { k: "compare_as", label: "Compare as (needed for more or less than; with equals, Numbers counts 10 and 10.00 as the same)", t: "choice", opts: [["number", "Numbers"], ["date", "Dates"]], optional: true },
     { k: "date_order", label: "Dates like 03/04/2024 (optional)", t: "choice", opts: DATE_ORDER, optional: true }] },
   calculate: { label: "Calculate a new column", why: "For example, quantity times price.", fields: [
     { k: "table", label: "Table", t: "table" }, { k: "first", label: "First column", t: "column", of: "table" },
