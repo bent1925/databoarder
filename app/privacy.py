@@ -15,6 +15,10 @@ _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _PHONE = re.compile(r"\+?\d[\d\s().-]{8,}\d")
 _ID_NAME = re.compile(r"(^|[\s_-])id$|^id[\s_-]|uuid|^user$|^customer$|^account$|customer.?(ref|code|no|num)|^cust", re.I)
 _SENSITIVE_NAME = re.compile(r"name|e-?mail|phone|mobile|address|postcode|postal|zip|ssn|birth|dob|ip.?addr|cookie|device", re.I)
+# Always about one person, however often the values repeat (an events table repeats each customer's phone).
+# Names like zip_code or campaign_name can hold harmless groups, so they keep the uniqueness rule below.
+_PERSONAL_NAME = re.compile(r"e-?mail|phone|mobile|^tel|ssn|birth|dob|ip.?addr|street|"
+                            r"(first|last|full|given|family|sur|customer|person|contact).?name|^name$", re.I)
 
 
 def _is_mostly_dates(text: pd.Series) -> bool:
@@ -29,18 +33,19 @@ def should_mask(name: str, series: pd.Series) -> bool:
     if values.empty:
         return False
     sample = values.astype(str).head(1000)
-    if sample.str.contains(_EMAIL).any() or _ID_NAME.search(str(name)):
+    if sample.str.contains(_EMAIL).any() or _ID_NAME.search(str(name)) or _PERSONAL_NAME.search(str(name)):
         return True
     rows, unique = len(values), int(values.nunique())
     if _SENSITIVE_NAME.search(str(name)) and (unique > 20 or unique >= 0.9 * rows):
+        return True
+    phones = sample.str.fullmatch(_PHONE) & ~sample.str.fullmatch(r"[+-]?\d*\.\d+")    # not decimals like 0.123456789
+    if phones.any() and not _is_mostly_dates(sample):
         return True
     numbers = pd.to_numeric(values, errors="coerce")
     if numbers.notna().all():
         return bool((numbers == numbers.round()).all() and rows >= 20 and unique >= 0.9 * rows)
     if _is_mostly_dates(sample):
         return False
-    if sample.str.fullmatch(_PHONE).any():
-        return True
     return unique >= max(20, 0.5 * rows)
 
 

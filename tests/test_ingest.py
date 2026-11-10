@@ -12,7 +12,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.ingest import build_table, inspect_file, inspect_files, require_comparison, script_block
+from app.ingest import (build_table, describe, inspect_file, inspect_files, output_name, read_frozen,
+                        require_comparison, script_block)
 from app.main import DATASETS, app
 from app.recipe_ops import RecipeError
 from app.schemas import DataRecipe
@@ -323,6 +324,35 @@ EVENTS = ("id,when,amount\n1,2024-01-09 08:00:00,5\n1,2024-01-10 09:00:00,1\n1,2
 def test_window_counts_only_events_inside_it(tmp_path):
     built = build_table(_window_plan(tmp_path, "id,start\n1,2024-01-10 09:00:00\n2,2024-01-10\n", EVENTS), tmp_path)
     assert built.table["n"].tolist() == [2, "0"] and built.table["total"].tolist() == [3.0, "0"]
+
+
+def test_window_says_what_each_measure_calculates(tmp_path):
+    plan = _window_plan(tmp_path, "id,start\n1,2024-01-10\n", EVENTS, measures=[
+        {"how": "count_rows", "into": "n"}, {"how": "sum", "column": "amount", "into": "total"},
+        {"how": "any_event", "into": "bought"}])
+    text = describe(plan.steps[2])
+    assert "n (number of events)" in text and "total (total of 'amount')" in text
+    assert "bought (1 if any event, otherwise 0)" in text
+
+
+def test_window_results_are_read_back_as_numbers(tmp_path):
+    built = build_table(_window_plan(tmp_path, "id,start\n1,2024-01-10 09:00:00\n2,2024-01-10\n", EVENTS), tmp_path)
+    assert built.read_options["dtype"] == {"start": "str"}
+    assert read_frozen(built)["total"].tolist() == [3.0, 0.0]
+
+
+def test_reading_back_keeps_labels_that_look_like_numbers_or_missing(tmp_path):
+    (tmp_path / "p.csv").write_text("id,group,region,visits\n001,01,NA,3\n002,1,EU,4\n003,1.0,NA,5\n")
+    built = build_table(recipe([{"op": "read_table", "file": "p.csv", "header_row": 0, "footer_rows": 0,
+                                 "into": "p"}], "p"), tmp_path)
+    table = read_frozen(built)
+    assert table["id"].tolist() == ["001", "002", "003"] and table["group"].tolist() == ["01", "1", "1.0"]
+    assert table["region"].tolist() == ["NA", "EU", "NA"] and table["visits"].tolist() == [3, 4, 5]
+
+
+def test_frozen_table_never_takes_an_original_file_name():
+    assert output_name(["people.csv"]) == "analysis_table.csv"
+    assert output_name(["Analysis_Table.csv", "analysis_table_2.csv"]) == "analysis_table_3.csv"
 
 
 def test_window_reports_what_it_left_out(tmp_path):

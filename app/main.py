@@ -6,7 +6,7 @@ import io
 import uuid
 from collections import OrderedDict
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -15,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from .analysis import analyze
-from .ingest import (build_table, inspect_files, preview_recipe, require_comparison, require_one_row_per_unit,
-                     require_time_span, script_block, suggest_read_steps)
+from .ingest import (FROZEN_NAME, build_table, inspect_files, preview_recipe, read_frozen, require_comparison,
+                     require_one_row_per_unit, require_time_span, script_block, suggest_read_steps)
 from .schemas import AnySpec, DataRecipe, Mode
 from .observational import covariate_candidates
 from .prep import prepare
@@ -36,7 +36,6 @@ MAX_BYTES = 25 * 1024 * 1024
 MAX_DATASETS = 40
 DATASETS: "OrderedDict[str, dict]" = OrderedDict()
 SOURCES = SourceStore()
-FROZEN_NAME = "analysis_table.csv"
 
 
 class AskBody(BaseModel):
@@ -74,15 +73,24 @@ def _get(dataset_id: str) -> dict:
     return ds
 
 
-def _ingest(raw: bytes, name: str, source: Optional[dict] = None, source_script: str = "") -> dict:
-    """The one path every table takes into the analysis, whether uploaded directly or built from several files."""
-    try:
-        df = pd.read_csv(io.BytesIO(raw))
-    except Exception:
-        raise HTTPException(400, "Couldn't read that as a CSV file.")
+def _ingest(raw: bytes, name: str, source: Optional[dict] = None, source_script: str = "",
+            df: Optional[pd.DataFrame] = None, check: Optional[Callable[[pd.DataFrame], None]] = None) -> dict:
+    """The one path every table takes into the analysis, whether uploaded directly or built from several files.
+
+    A built table arrives already read back from `raw` as `df`, and `check` runs on the table that will be analyzed."""
+    if df is None:
+        try:
+            df = pd.read_csv(io.BytesIO(raw))
+        except Exception:
+            raise HTTPException(400, "Couldn't read that as a CSV file.")
     if df.shape[0] < 2 or df.shape[1] < 2:
         raise HTTPException(400, "The file needs at least 2 rows and 2 columns.")
     df, steps, notes = prepare(df)
+    if check:
+        try:
+            check(df)
+        except RecipeError as problem:
+            raise HTTPException(400, f"After the usual clean-up of the finished table: {problem}")
     dataset_id = uuid.uuid4().hex[:12]
     while len(DATASETS) >= MAX_DATASETS:
         DATASETS.popitem(last=False)
@@ -167,21 +175,27 @@ def confirm_source(source_id: str, body: ConfirmBody):
     try:
         folder = SOURCES.folder(source_id)
         built = build_table(recipe, folder)
-        require_one_row_per_unit(built.table, body.unit_column)
-        if body.group_column:
-            require_comparison(built.table, body.group_column)
-        elif body.time_column:
-            require_time_span(built.table, body.time_column)
-        else:
-            raise RecipeError("Choose a column that says who got the campaign, or a date column for before and after.")
+
+        def check(table: pd.DataFrame) -> None:
+            require_one_row_per_unit(table, body.unit_column)
+            if body.group_column:
+                require_comparison(table, body.group_column)
+            elif body.time_column:
+                require_time_span(table, body.time_column)
+            else:
+                raise RecipeError("Choose a column that says who got the campaign, or a date column for before and after.")
+
+        check(built.table)
+        table = read_frozen(built)
     except RecipeError as problem:
         raise HTTPException(400, str(problem))
     if len(built.csv_bytes) > MAX_BYTES:
         raise HTTPException(413, "The finished table is larger than 25 MB. Roll it up or keep fewer columns.")
     source = {"kind": "recipe", "inputs": built.inputs, "recipe": recipe.model_dump(), "table_sha256": built.sha256,
+              "table_file": built.name, "read_options": built.read_options,
               "unit_column": body.unit_column, "group_column": body.group_column, "time_column": body.time_column,
               "steps": [{key: entry[key] for key in ("text", "rows_before", "rows_after", "note")} for entry in built.log]}
-    result = _ingest(built.csv_bytes, FROZEN_NAME, source, script_block(recipe, FROZEN_NAME))
+    result = _ingest(built.csv_bytes, built.name, source, script_block(recipe, built.name), df=table, check=check)
     path = SOURCES.snapshot_path(source_id, result["dataset_id"])
     path.write_bytes(built.csv_bytes)
     DATASETS[result["dataset_id"]]["snapshot_path"] = path
@@ -190,10 +204,11 @@ def confirm_source(source_id: str, body: ConfirmBody):
 
 @app.get("/api/datasets/{dataset_id}/snapshot")
 def download_snapshot(dataset_id: str):
-    path = _get(dataset_id).get("snapshot_path")
+    dataset = _get(dataset_id)
+    path = dataset.get("snapshot_path")
     if not path or not path.is_file():
         raise HTTPException(404, "That table is no longer stored. Build it again from your files to download it.")
-    return FileResponse(path, media_type="text/csv", filename=FROZEN_NAME)
+    return FileResponse(path, media_type="text/csv", filename=dataset["name"])
 
 
 @app.post("/api/ask")

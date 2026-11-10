@@ -406,3 +406,20 @@ def run_recipe(recipe, folder):
 def freeze(table):
     """The final table as exact CSV bytes. These bytes are what gets fingerprinted and analyzed."""
     return table.to_csv(index=False, lineterminator="\n").encode("utf-8")
+
+
+def read_options(table):
+    """How to read the frozen table back without changing any value: pass these to pandas.read_csv.
+
+    Only an empty cell is missing, as in the recipe, so a label like NA stays a label. A text column is
+    read as numbers only when that changes nothing, so 00123 keeps its zeros and 1 and 1.0 stay apart."""
+    text = []
+    for column in table.columns:
+        if pd.api.types.is_numeric_dtype(table[column]):
+            continue
+        values = table[column].dropna()
+        written = values[values.map(lambda value: isinstance(value, str))]    # a step may also have made numbers
+        if (pd.to_numeric(values.astype(str), errors="coerce").isna().any() or written.str.match(r"[+-]?0\d").any()
+                or pd.to_numeric(written).nunique() != written.nunique()):
+            text.append(str(column))
+    return {"dtype": {column: "str" for column in text}, "keep_default_na": False, "na_values": [""]}

@@ -42,5 +42,8 @@ def analyze(df: pd.DataFrame, spec, csv_name: str = "your_file.csv", mode: str =
     if source:
         rep.repro = {**rep.repro, "source": source}
         if rep.script:
+            if source.get("read_options"):    # the built table is read back without changing any value
+                rep.script = re.sub(r"^(df = pd\.read_csv\(.*)\)$", r"\1, **READ_OPTIONS)", rep.script,
+                                    count=1, flags=re.M)
             rep.script = f"{source_script}\n\n{rep.script}"
     return rep

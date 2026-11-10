@@ -275,6 +275,32 @@ def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hi
     assert rebuilt.stdout == direct.stdout and re.search(r"\d", rebuilt.stdout)
 
 
+def test_confirmed_labels_reach_the_analysis_and_the_script_unchanged(tmp_path):
+    people = "id,group,region,visits\n" + "".join(f"C-{i},{'01' if i % 2 else '1'},{'NA' if i % 3 else 'EU'},{i % 7}\n"
+                                                  for i in range(1, 61))
+    got = add(csv_file("people.csv", people))
+    steps = confirmed(got["steps"] + [{"op": "clean_key", "table": "people", "column": "id", "rule": "digits_only",
+                                       "into": "pid"}])
+    result = confirm(got["source_id"], steps).json()
+    analyzed = main.DATASETS[result["dataset_id"]]["df"]
+    assert sorted(analyzed["group"].unique()) == ["01", "1"] and "NA" in set(analyzed["region"])
+
+    spec = ABTestSpec(group_col="group", control="01", treatment="1", outcome_col="visits").model_dump()
+    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": "quick"}).json()
+    assert "error" not in report and "**READ_OPTIONS" in report["script"]
+    (tmp_path / "people.csv").write_text(people)
+    (tmp_path / "repro.py").write_text(report["script"])
+    subprocess.run([sys.executable, "repro.py"], cwd=tmp_path, check=True, capture_output=True, text=True)
+
+
+def test_an_original_named_like_the_finished_table_is_not_overwritten():
+    got = add(csv_file("people.csv", PEOPLE), csv_file("analysis_table.csv", ORDERS))
+    reads = [{**step, "into": "orders"} if step["file"] == "analysis_table.csv" else step for step in got["steps"]]
+    result = confirm(got["source_id"], confirmed(people_steps(reads))).json()
+    assert result["name"] == "analysis_table_2.csv"
+    assert "open('analysis_table_2.csv', 'wb')" in main.DATASETS[result["dataset_id"]]["source_script"]
+
+
 def test_page_has_the_new_screen():
     page = client.get("/").text
     assert 'id="m1"' in page and "Put them together first" in page
