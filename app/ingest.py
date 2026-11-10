@@ -101,6 +101,14 @@ def _one_line(text: str) -> str:
     return " ".join(str(text).split())
 
 
+def _order(step) -> str:
+    if not step.date_order:
+        return ""
+    first = "day" if step.date_order == "day_first" else "month"
+    example = "3 April" if first == "day" else "4 March"
+    return f" Dates like 03/04/2024 are read with the {first} first, as {example} 2024."
+
+
 def describe(step) -> str:
     """Plain English for one step, written by code from the step's own fields."""
     kind = step.op
@@ -118,7 +126,8 @@ def describe(step) -> str:
         return f"In '{step.table}', make '{step.into}' from '{step.column}' by {rule}, so IDs can be matched."
     if kind == "filter":
         words = step.test.replace("_", " ")
-        return f"In '{step.table}', keep only rows where '{step.column}' {words} {step.value}."
+        as_date = " (as a date)" if step.compare_as == "date" else " (as a number)" if step.compare_as == "number" else ""
+        return f"In '{step.table}', keep only rows where '{step.column}' {words} {step.value}{as_date}.{_order(step)}"
     if kind == "roll_up":
         parts = [f"{m.into} ({m.how.replace('_', ' ')}{' of ' + m.column if m.column else ''})" for m in step.measures]
         return f"Roll '{step.table}' up to one row per '{step.by}' as '{step.into}': {', '.join(parts)}."
@@ -139,9 +148,10 @@ def describe(step) -> str:
         fallback = f", or {step.default_start} for rows without one," if step.default_start else ""
         how = {"sum": "total of '{}'", "count_rows": "number of events", "any_event": "1 if any event, otherwise 0"}
         parts = [f"{m.into} ({how[m.how].format(m.column)})" for m in step.measures]
-        return (f"For each row in '{step.table}', look at '{step.events}' from '{step.start_column}'{fallback} "
+        return (f"For each row in '{step.table}', look at '{step.events}' rows with the same '{step.event_key}', "
+                f"dated by '{step.event_date}', from '{step.start_column}'{fallback} "
                 f"through {step.days} calendar day(s), counting the start day, to make "
-                f"{', '.join(parts)}. Rows with no events get {step.no_events_value}.")
+                f"{', '.join(parts)}. Rows with no events get {step.no_events_value}.{_order(step)}")
     return f"In '{step.table}', treat empty values of '{step.column}' as {step.value}."
 
 

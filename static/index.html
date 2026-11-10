@@ -410,7 +410,9 @@ const OPS = {
     { k: "table", label: "Table", t: "table" }, { k: "columns", label: "Columns to keep", t: "map", of: "table" }] },
 };
 
-const outFor = (s) => s.into || s.table || s.left;
+// These steps add a column to their table, so `into` names a column, not the table they leave behind.
+const ADDS_COLUMN = ["clean_key", "calculate", "flag_membership"];
+const outFor = (s) => (ADDS_COLUMN.includes(s.op) ? s.table : s.into || s.table || s.left);
 const outputName = () => M.output || (M.steps.length ? outFor(M.steps[M.steps.length - 1]) : "");
 const recipe = () => ({ steps: M.steps, output: outputName() });
 const colsOf = (name) => M.tables[name] || [];

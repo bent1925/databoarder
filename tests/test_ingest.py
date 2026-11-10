@@ -416,6 +416,42 @@ def test_day_first_setting_does_not_swap_unambiguous_dates(tmp_path):
     assert build_table(plan, tmp_path).table["v"].tolist() == ["1", "2"]
 
 
+def _date_filter(tmp_path, value, date_order):
+    (tmp_path / "d.csv").write_text("d,v\n20/03/2024,1\n10/04/2024,2\n")
+    return recipe([{"op": "read_table", "file": "d.csv", "header_row": 0, "footer_rows": 0, "into": "t"},
+                   {"op": "filter", "table": "t", "column": "d", "test": "at_least", "value": value,
+                    "compare_as": "date", "date_order": date_order}], "t")
+
+
+@pytest.mark.parametrize("date_order,kept", [("day_first", ["2"]), ("month_first", ["1", "2"])])
+def test_typed_cutoff_follows_the_stated_date_order(tmp_path, date_order, kept):
+    assert build_table(_date_filter(tmp_path, "03/04/2024", date_order), tmp_path).table["v"].tolist() == kept
+
+
+def test_ambiguous_cutoff_must_be_stated(tmp_path):
+    (tmp_path / "d.csv").write_text("d,v\n2024-03-20,1\n2024-04-10,2\n")
+    plan = recipe([{"op": "read_table", "file": "d.csv", "header_row": 0, "footer_rows": 0, "into": "t"},
+                   {"op": "filter", "table": "t", "column": "d", "test": "at_least", "value": "03/04/2024",
+                    "compare_as": "date"}], "t")
+    with pytest.raises(RecipeError, match="could be March or April"):
+        build_table(plan, tmp_path)
+    plan.steps[1].value = "2024-04-03"
+    assert build_table(plan, tmp_path).table["v"].tolist() == ["2"]
+
+
+def test_fallback_start_follows_the_stated_date_order(tmp_path):
+    people, events = "id,start\n1,\n", "id,when,amount\n1,2024-03-05,1\n1,2024-04-05,2\n"
+    april = _window_plan(tmp_path, people, events, date_order="day_first", default_start="03/04/2024", days=7)
+    assert build_table(april, tmp_path).table["total"].tolist() == [2.0]
+
+
+def test_descriptions_show_date_choices(tmp_path):
+    text = describe(_date_filter(tmp_path, "03/04/2024", "day_first").steps[1])
+    assert "(as a date)" in text and "day first, as 3 April 2024" in text
+    window = describe(_window_plan(tmp_path, "id,start\n1,2024-01-10\n", EVENTS, date_order="month_first").steps[2])
+    assert "dated by 'when'" in window and "same 'id'" in window and "month first, as 4 March 2024" in window
+
+
 def test_numeric_style_dates_are_understood(tmp_path):
     plan = _window_plan(tmp_path, "id,start\n1,20240110\n", "id,when,amount\n1,20240112,3\n")
     assert build_table(plan, tmp_path).table["total"].tolist() == [3.0]

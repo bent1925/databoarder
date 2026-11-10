@@ -97,9 +97,12 @@ def _numbers(series, column):
     return numbers
 
 
+_AMBIGUOUS_DATE = r"^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}"
+
+
 def _dates(series, column, date_order=None):
     """Reads dates. Won't guess whether 03/04/2010 is March or April: that has to be stated."""
-    ambiguous = series.notna() & series.astype(str).str.match(r"^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}")
+    ambiguous = series.notna() & series.astype(str).str.match(_AMBIGUOUS_DATE)
     if date_order is None and ambiguous.any():
         raise RecipeError(f"Dates in '{column}' look like 03/04/2010, which could be March or April. "
                           "Say whether the day or the month comes first.")
@@ -114,11 +117,15 @@ def _dates(series, column, date_order=None):
     return parsed
 
 
-def _timestamp(value, label):
-    try:
-        return pd.Timestamp(value)
-    except ValueError:
+def _timestamp(value, label, date_order=None):
+    """Reads one typed date by the same rules as the step's date column, so 03/04/2024 means the same in both."""
+    if date_order is None and re.match(_AMBIGUOUS_DATE, str(value)):
+        raise RecipeError(f"{label} '{value}' could be March or April. Say whether the day or the month comes first, "
+                          "or write it like 2024-04-03.")
+    parsed = _dates(pd.Series([value], dtype=object), label, date_order).iloc[0]
+    if pd.isna(parsed):
         raise RecipeError(f"{label} '{value}' isn't a date this app can read. Write it like 2010-12-01.")
+    return parsed
 
 
 def _read_table(step, tables, folder):
@@ -184,7 +191,7 @@ def _filter(step, tables, folder):
     else:
         if step.get("compare_as") == "date":
             left = _dates(values, step["column"], step.get("date_order"))
-            right = _timestamp(target, "The date")
+            right = _timestamp(target, "The date", step.get("date_order"))
         elif step.get("compare_as") == "number":
             try:
                 left, right = pd.to_numeric(values, errors="coerce"), float(target)
@@ -329,7 +336,7 @@ def _count_within_window(step, tables, folder):
     order = step.get("date_order")
     starts = _dates(_column(table, step["start_column"], step["table"]), step["start_column"], order)
     if step.get("default_start"):
-        starts = starts.fillna(_timestamp(step["default_start"], "The start date"))
+        starts = starts.fillna(_timestamp(step["default_start"], "The start date", order))
     no_start = starts.isna() & keys.notna()
     event_keys = _column(events, step["event_key"], step["events"])
     event_dates = _dates(_column(events, step["event_date"], step["events"]), step["event_date"], order)
