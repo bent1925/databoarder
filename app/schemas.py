@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Discriminator, Field, Tag, field_validator
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, field_validator
 
 
 class ABTestSpec(BaseModel):
@@ -223,3 +223,107 @@ class Report(BaseModel):
     script: str = ""
     series: Optional[dict] = None      # before/after: the daily line for the chart
     spec: Optional[AnySpec] = None
+
+
+# --------------------------------------------------------------------------- the data stage
+
+class _RecipeStep(BaseModel):
+    """One fixed step. Steps start as proposed, and nothing runs until the person has confirmed them all."""
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["proposed", "confirmed"] = "proposed"
+
+
+class ReadTable(_RecipeStep):
+    op: Literal["read_table"] = "read_table"
+    file: str
+    sheet: Optional[str] = None
+    delimiter: str = ","
+    header_row: int = Field(ge=0, description="Position of the row holding the column names, counting from 0")
+    footer_rows: int = Field(ge=0, description="Rows to leave out at the bottom, such as a total line")
+    into: str
+
+
+class ChooseColumns(_RecipeStep):
+    op: Literal["choose_columns"] = "choose_columns"
+    table: str
+    columns: dict[str, str] = Field(min_length=1, description="Current name -> name to use")
+
+
+class Stack(_RecipeStep):
+    op: Literal["stack"] = "stack"
+    tables: list[str] = Field(min_length=1)
+    into: str
+
+
+class CleanKey(_RecipeStep):
+    op: Literal["clean_key"] = "clean_key"
+    table: str
+    column: str
+    rule: Literal["digits_only", "trim", "lowercase"]
+    into: str
+
+
+class FilterRows(_RecipeStep):
+    op: Literal["filter"] = "filter"
+    table: str
+    column: str
+    test: Literal["equals", "not_equals", "starts_with", "not_starts_with",
+                  "greater_than", "at_least", "less_than", "at_most"]
+    value: str
+    compare_as: Optional[Literal["number", "date"]] = None
+
+
+class Measure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    how: Literal["sum", "mean", "max", "min", "any_positive", "count_rows"]
+    column: Optional[str] = None
+    into: str
+
+
+class RollUp(_RecipeStep):
+    op: Literal["roll_up"] = "roll_up"
+    table: str
+    by: str
+    measures: list[Measure] = Field(min_length=1)
+    into: str
+
+
+class MatchTables(_RecipeStep):
+    op: Literal["match"] = "match"
+    left: str
+    right: str
+    left_key: str
+    right_key: str
+    bring: dict[str, str] = Field(min_length=1, description="Column in the right table -> name to use")
+
+
+class FlagMembership(_RecipeStep):
+    op: Literal["flag_membership"] = "flag_membership"
+    table: str
+    key: str
+    other: str
+    other_key: str
+    into: str
+    yes: str
+    no: str
+
+
+class FillMissing(_RecipeStep):
+    """Has no default on purpose: what an empty value means is the person's decision."""
+    op: Literal["fill_missing"] = "fill_missing"
+    table: str
+    column: str
+    value: str
+
+
+RecipeStep = Annotated[
+    Union[ReadTable, ChooseColumns, Stack, CleanKey, FilterRows, RollUp, MatchTables, FlagMembership, FillMissing],
+    Field(discriminator="op"),
+]
+
+
+class DataRecipe(BaseModel):
+    """How messy files become one analysis table. It is plain data: fixed code carries out each step."""
+    model_config = ConfigDict(extra="forbid")
+    steps: list[RecipeStep] = Field(min_length=1)
+    output: str = Field(description="Name of the table that becomes the analysis table")

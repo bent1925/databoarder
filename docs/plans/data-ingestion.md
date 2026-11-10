@@ -1,6 +1,7 @@
 # Plan: Seamless data ingestion
 
-Status: not started. Written 2026-11-09 against `main` at `23df680`.
+Status: step 1 in progress. File reading, the recipe and the frozen table exist in `app/ingest.py`, with
+no routes or screens yet. Written 2026-11-09 against `main` at `23df680`.
 Line numbers below are from that commit and may drift.
 
 ## The problem
@@ -195,17 +196,19 @@ Add a `DataRecipe` to `app/schemas.py`, built like `AnySpec`: a typed list of fi
 Starting set, to be trimmed or extended from step 0:
 - read a table (file, Excel sheet, header row, footer rows to skip)
 - keep or rename columns
-- reshape wide to long
+- stack tables with the same columns, such as sheets split by year
+- reshape wide to long (not built yet)
 - match tables on a key, with key normalization such as trimming and lowercasing
 - filter rows on a stated condition
 - roll up to a unit, with a stated rule
 - build a treatment indicator from a column or from membership in a list
-- count an outcome within a time window
+- count an outcome within a time window (not built yet)
 - fill missing values after a match, with a stated value
 
-Each operation produces both plain English and pandas code, extending the `Step` pattern in
-`app/prep.py:19-21`. Each carries a status of proposed or confirmed, and code refuses to run a recipe
-with any proposed step.
+Each operation has a plain-English description. The operations themselves live in the standalone
+`app/recipe_ops.py`, which is copied word for word into the reproduction script, so the app and the
+script run the same code. Each step carries a status of proposed or confirmed, and code refuses to run
+a recipe with any proposed step.
 
 ### AI's role
 
