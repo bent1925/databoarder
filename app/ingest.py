@@ -124,6 +124,18 @@ def describe(step) -> str:
     if kind == "flag_membership":
         return (f"In '{step.table}', set '{step.into}' to {step.yes} if '{step.key}' is in '{step.other}', "
                 f"and to {step.no} if it isn't.")
+    if kind == "calculate":
+        words = {"multiply": "multiplied by", "add": "plus", "subtract": "minus", "divide": "divided by"}[step.operation]
+        return f"In '{step.table}', make '{step.into}' as '{step.first}' {words} '{step.second}'."
+    if kind == "reshape_long":
+        return (f"Turn the {len(step.value_columns)} columns from '{step.value_columns[0]}' to "
+                f"'{step.value_columns[-1]}' in '{step.table}' into rows, as '{step.into}', with their names in "
+                f"'{step.names_to}' and their values in '{step.values_to}'.")
+    if kind == "count_within_window":
+        fallback = f", or {step.default_start} for rows without one," if step.default_start else ""
+        return (f"For each row in '{step.table}', look at '{step.events}' from '{step.start_column}'{fallback} "
+                f"through {step.days} calendar day(s), counting the start day, to make "
+                f"{', '.join(m.into for m in step.measures)}. Rows with no events get {step.no_events_value}.")
     return f"In '{step.table}', treat empty values of '{step.column}' as {step.value}."
 
 

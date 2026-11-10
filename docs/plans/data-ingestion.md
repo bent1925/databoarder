@@ -197,13 +197,21 @@ Starting set, to be trimmed or extended from step 0:
 - read a table (file, Excel sheet, header row, footer rows to skip)
 - keep or rename columns
 - stack tables with the same columns, such as sheets split by year
-- reshape wide to long (not built yet)
+- reshape wide to long
+- calculate one column from two others, such as quantity times price
 - match tables on a key, with key normalization such as trimming and lowercasing
 - filter rows on a stated condition
 - roll up to a unit, with a stated rule
 - build a treatment indicator from a column or from membership in a list
-- count an outcome within a time window (not built yet)
+- count an outcome within a time window
 - fill missing values after a match, with a stated value
+
+The time window opens at each row's start date and runs through the stated number of calendar days,
+counting the start day. Its length and the value for rows with no events have no defaults, because
+both change results. Rows without a start date stay empty unless a default start is stated, which is
+how a comparison group that received nothing gets a window. The step reports events outside the
+window, and rows whose window runs past the end of the data, since those may be undercounted.
+Whether a date like 03/04/2010 has the day or month first must be stated, never guessed.
 
 Each operation has a plain-English description. The operations themselves live in the standalone
 `app/recipe_ops.py`, which is copied word for word into the reproduction script, so the app and the

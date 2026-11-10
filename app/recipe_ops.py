@@ -97,6 +97,30 @@ def _numbers(series, column):
     return numbers
 
 
+def _dates(series, column, date_order=None):
+    """Reads dates. Won't guess whether 03/04/2010 is March or April: that has to be stated."""
+    ambiguous = series.notna() & series.astype(str).str.match(r"^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}")
+    if date_order is None and ambiguous.any():
+        raise RecipeError(f"Dates in '{column}' look like 03/04/2010, which could be March or April. "
+                          "Say whether the day or the month comes first.")
+    # The stated order applies only to ambiguous dates: pandas would otherwise swap 2024-04-05 too.
+    parsed = pd.to_datetime(series.where(~ambiguous), errors="coerce")
+    failed = series.notna() & ~ambiguous & parsed.isna()
+    if failed.any():
+        parsed[failed] = pd.to_datetime(series[failed], errors="coerce", format="mixed")
+    if ambiguous.any():
+        parsed[ambiguous] = pd.to_datetime(series[ambiguous], errors="coerce", format="mixed",
+                                           dayfirst=date_order == "day_first")
+    return parsed
+
+
+def _timestamp(value, label):
+    try:
+        return pd.Timestamp(value)
+    except ValueError:
+        raise RecipeError(f"{label} '{value}' isn't a date this app can read. Write it like 2010-12-01.")
+
+
 def _read_table(step, tables, folder):
     name = step["file"]
     if Path(name).name != name:
@@ -159,9 +183,13 @@ def _filter(step, tables, folder):
         keep = ~values.str.startswith(target, na=False)
     else:
         if step.get("compare_as") == "date":
-            left, right = pd.to_datetime(values, errors="coerce"), pd.Timestamp(target)
+            left = _dates(values, step["column"], step.get("date_order"))
+            right = _timestamp(target, "The date")
         elif step.get("compare_as") == "number":
-            left, right = pd.to_numeric(values, errors="coerce"), float(target)
+            try:
+                left, right = pd.to_numeric(values, errors="coerce"), float(target)
+            except ValueError:
+                raise RecipeError(f"'{target}' isn't a number, so '{step['column']}' can't be compared with it.")
         else:
             raise RecipeError(f"Filtering '{step['column']}' needs to say whether it compares numbers or dates.")
         keep = {"greater_than": left > right, "at_least": left >= right,
@@ -239,9 +267,113 @@ def _fill_missing(step, tables, folder):
     return step["table"], len(table), f"Set {_count(filled, 'empty value')} to {step['value']}."
 
 
+def _new_column(table, name, table_name):
+    if name in table.columns:
+        raise RecipeError(f"'{table_name}' already has a column called '{name}'. Choose a different name.")
+
+
+def _calculate(step, tables, folder):
+    table = _table(tables, step["table"]).copy()
+    _new_column(table, step["into"], step["table"])
+    first = _numbers(_column(table, step["first"], step["table"]), step["first"])
+    second = _numbers(_column(table, step["second"], step["table"]), step["second"])
+    operation = step["operation"]
+    if operation == "multiply":
+        result = first * second
+    elif operation == "add":
+        result = first + second
+    elif operation == "subtract":
+        result = first - second
+    else:
+        result = first / second.where(second != 0)
+    table[step["into"]] = result.round(10)     # removes tiny decimal noise
+    tables[step["table"]] = table
+    blank = int(result.isna().sum())
+    return step["table"], len(table), f"{_count(blank, 'row')} couldn't be calculated and left empty." if blank else ""
+
+
+def _reshape_long(step, tables, folder):
+    table = _table(tables, step["table"])
+    for column in step["id_columns"] + step["value_columns"]:
+        _column(table, column, step["table"])
+    for name in (step["names_to"], step["values_to"]):
+        if name in step["id_columns"]:
+            raise RecipeError(f"'{name}' is already one of the columns being kept. Choose a different name.")
+    tables[step["into"]] = table.melt(id_vars=step["id_columns"], value_vars=step["value_columns"],
+                                      var_name=step["names_to"], value_name=step["values_to"])
+    blank = int(tables[step["into"]][step["values_to"]].isna().sum())
+    return step["into"], len(table), f"{_count(blank, 'new row')} with an empty value." if blank else ""
+
+
+def _measure_events(measure, rows, keys):
+    if measure["how"] == "count_rows":
+        return rows.groupby(keys).size()
+    if measure["how"] == "any_event":
+        return pd.Series(1, index=keys.dropna().unique()).sort_index()
+    return _numbers(rows[measure["column"]], measure["column"]).groupby(keys).sum().round(10)
+
+
+def _count_within_window(step, tables, folder):
+    """For each row, measures its events from its start date through the chosen number of calendar days."""
+    table = _table(tables, step["table"]).copy()
+    events = _table(tables, step["events"])
+    for measure in step["measures"]:
+        _new_column(table, measure["into"], step["table"])
+        if measure["how"] == "sum":
+            _column(events, measure["column"], step["events"])
+    keys = _column(table, step["key"], step["table"])
+    repeats = int(keys.dropna().duplicated().sum())
+    if repeats:
+        raise RecipeError(f"'{step['key']}' repeats in '{step['table']}' ({repeats:,} extra rows), so each row can't "
+                          "have its own window. Roll that table up to one row per ID first.")
+    order = step.get("date_order")
+    starts = _dates(_column(table, step["start_column"], step["table"]), step["start_column"], order)
+    if step.get("default_start"):
+        starts = starts.fillna(_timestamp(step["default_start"], "The start date"))
+    no_start = starts.isna() & keys.notna()
+    event_keys = _column(events, step["event_key"], step["events"])
+    event_dates = _dates(_column(events, step["event_date"], step["events"]), step["event_date"], order)
+
+    start_of = pd.Series(starts.to_numpy(), index=keys.to_numpy())
+    start_of = start_of[start_of.index.notna()]
+    event_starts = event_keys.map(start_of)
+    # The window opens at the start itself and closes at midnight after the last calendar day.
+    event_ends = event_starts.dt.normalize() + pd.Timedelta(days=step["days"])
+    inside = (event_dates >= event_starts) & (event_dates < event_ends)
+
+    rows = events[inside]
+    for measure in step["measures"]:
+        found = _measure_events(measure, rows, event_keys[inside])
+        result = pd.Series(step["no_events_value"], index=table.index, dtype=object)
+        has_events = keys.isin(found.index)
+        result[has_events] = keys[has_events].map(found).astype(object)
+        result[no_start | keys.isna()] = np.nan
+        table[measure["into"]] = result
+    tables[step["table"]] = table
+
+    known = event_starts.notna()
+    parts = [f"{int(inside.sum()):,} of {len(events):,} events fell inside the window."]
+    for count, words in ((int((known & (event_dates < event_starts)).sum()), "before it started"),
+                         (int((known & (event_dates >= event_ends)).sum()), "after it ended"),
+                         (int((~event_keys.isin(start_of.index)).sum()), "belonged to no row in the table"),
+                         (int((events[step["event_date"]].notna() & event_dates.isna()).sum()), "had an unreadable date")):
+        if count:
+            parts.append(f"{_count(count, 'event')} {words}.")
+    if int(no_start.sum()):
+        parts.append(f"{_count(int(no_start.sum()), 'row')} had no start date and left empty.")
+    latest = event_dates.max()
+    last_days = starts.dt.normalize() + pd.Timedelta(days=step["days"] - 1)
+    cut_off = int((last_days > latest.normalize()).sum()) if pd.notna(latest) else 0
+    if cut_off:
+        parts.append(f"{_count(cut_off, 'row')} had a window running past the last event date, "
+                     f"{latest:%Y-%m-%d}, so may be undercounted.")
+    return step["table"], len(table), " ".join(parts)
+
+
 OPERATIONS = {"read_table": _read_table, "choose_columns": _choose_columns, "stack": _stack, "clean_key": _clean_key,
               "filter": _filter, "roll_up": _roll_up, "match": _match, "flag_membership": _flag_membership,
-              "fill_missing": _fill_missing}
+              "fill_missing": _fill_missing, "calculate": _calculate, "reshape_long": _reshape_long,
+              "count_within_window": _count_within_window}
 
 
 def run_recipe(recipe, folder):

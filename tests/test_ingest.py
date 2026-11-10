@@ -267,6 +267,182 @@ def test_stack_refuses_different_columns(tmp_path):
         build_table(plan, tmp_path)
 
 
+def windowed_hillstrom_steps():
+    """Builds the outcomes from dated events, the way a real campaign pull would need."""
+    steps = hillstrom_steps()[:8] + [
+        {"op": "match", "left": "customers", "right": "sends", "left_key": "customer_id", "right_key": "customer_id",
+         "bring": {"campaign": "segment", "send_date": "start"}},
+        {"op": "fill_missing", "table": "customers", "column": "segment", "value": tool.NO_EMAIL},
+        {"op": "flag_membership", "table": "customers", "key": "customer_id", "other": "sends",
+         "other_key": "customer_id", "into": "emailed", "yes": "1", "no": "0"}]
+    common = {"op": "count_within_window", "table": "customers", "key": "customer_id", "start_column": "start",
+              "default_start": "2008-03-03", "event_key": "customer_id", "days": tool.OUTCOME_WINDOW_DAYS,
+              "no_events_value": "0"}
+    return steps + [
+        {**common, "events": "visits", "event_date": "visit_date", "measures": [{"how": "any_event", "into": "visit"}]},
+        {**common, "events": "purchases", "event_date": "order_date",
+         "measures": [{"how": "any_event", "into": "conversion"}, {"how": "sum", "column": "amount", "into": "spend"}]},
+    ]
+
+
+def test_hillstrom_outcomes_rebuilt_from_dated_events(answer, pull):
+    assert tool.same_table(as_analyzed(build_table(recipe(windowed_hillstrom_steps(), "customers"), pull)), answer)
+
+
+@pytest.mark.skipif(not (REAL_PULL / "pull_full").exists(), reason="the real Hillstrom pull hasn't been generated")
+def test_real_hillstrom_outcomes_rebuilt_from_dated_events():
+    pytest.importorskip("openpyxl")
+    key = pd.read_csv(REAL_PULL / "answer_key" / "analysis_table.csv")
+    plan = recipe(windowed_hillstrom_steps(), "customers")
+    assert tool.same_table(as_analyzed(build_table(plan, REAL_PULL / "pull_full")), key)
+
+
+def test_script_rebuilds_a_table_made_with_a_window(pull):
+    plan = recipe(windowed_hillstrom_steps(), "customers")
+    built = build_table(plan, pull)
+    (pull / "rebuild.py").write_text(script_block(plan))
+    subprocess.run([sys.executable, "rebuild.py"], cwd=pull, check=True, capture_output=True, text=True)
+    assert hashlib.sha256((pull / "analysis_table.csv").read_bytes()).hexdigest() == built.sha256
+
+
+def _window_plan(tmp_path, people, events, **changes):
+    (tmp_path / "p.csv").write_text(people)
+    (tmp_path / "e.csv").write_text(events)
+    step = {"op": "count_within_window", "table": "p", "key": "id", "start_column": "start", "events": "e",
+            "event_key": "id", "event_date": "when", "days": 7, "no_events_value": "0",
+            "measures": [{"how": "count_rows", "into": "n"}, {"how": "sum", "column": "amount", "into": "total"}]}
+    return recipe([{"op": "read_table", "file": "p.csv", "header_row": 0, "footer_rows": 0, "into": "p"},
+                   {"op": "read_table", "file": "e.csv", "header_row": 0, "footer_rows": 0, "into": "e"},
+                   {**step, **changes}], "p")
+
+
+EVENTS = ("id,when,amount\n1,2024-01-09 08:00:00,5\n1,2024-01-10 09:00:00,1\n1,2024-01-16 23:59:00,2\n"
+          "1,2024-01-17 00:00:00,100\n9,2024-01-11,7\n")
+
+
+def test_window_counts_only_events_inside_it(tmp_path):
+    built = build_table(_window_plan(tmp_path, "id,start\n1,2024-01-10 09:00:00\n2,2024-01-10\n", EVENTS), tmp_path)
+    assert built.table["n"].tolist() == [2, "0"] and built.table["total"].tolist() == [3.0, "0"]
+
+
+def test_window_reports_what_it_left_out(tmp_path):
+    built = build_table(_window_plan(tmp_path, "id,start\n1,2024-01-10 09:00:00\n2,2024-01-10\n", EVENTS), tmp_path)
+    note = built.log[2]["note"]
+    assert note.startswith("2 of 5 events fell inside the window.")
+    assert "1 event before it started." in note and "1 event after it ended." in note
+    assert "1 event belonged to no row in the table." in note
+
+
+def test_window_length_and_no_events_value_are_required():
+    base = {"op": "count_within_window", "table": "p", "key": "id", "start_column": "s", "events": "e",
+            "event_key": "id", "event_date": "w", "measures": [{"how": "count_rows", "into": "n"}]}
+    with pytest.raises(ValidationError):
+        DataRecipe(steps=[{**base, "no_events_value": "0"}], output="p")
+    with pytest.raises(ValidationError):
+        DataRecipe(steps=[{**base, "days": 7}], output="p")
+
+
+def test_window_leaves_rows_without_a_start_empty_not_zero(tmp_path):
+    built = build_table(_window_plan(tmp_path, "id,start\n1,2024-01-10\n2,\n", EVENTS), tmp_path)
+    assert built.table["n"].iloc[0] == 2 and pd.isna(built.table["n"].iloc[1])
+    assert "1 row had no start date and left empty." in built.log[2]["note"]
+
+
+def test_window_default_start_covers_the_comparison_group(tmp_path):
+    plan = _window_plan(tmp_path, "id,start\n1,2024-01-10\n1000,\n", "id,when,amount\n1000,2024-01-12,4\n",
+                        default_start="2024-01-10", days=2)
+    assert build_table(plan, tmp_path).table["n"].tolist() == ["0", "0"]     # the 12th is outside a 2-day window
+    plan = _window_plan(tmp_path, "id,start\n1,2024-01-10\n1000,\n", "id,when,amount\n1000,2024-01-11,4\n",
+                        default_start="2024-01-10", days=2)
+    assert build_table(plan, tmp_path).table["n"].tolist() == ["0", 1]
+
+
+def test_window_warns_when_data_ends_too_soon(tmp_path):
+    plan = _window_plan(tmp_path, "id,start\n1,2024-01-10\n", "id,when,amount\n1,2024-01-11,1\n", days=30)
+    assert ("1 row had a window running past the last event date, 2024-01-11, so may be undercounted."
+            in build_table(plan, tmp_path).log[2]["note"])
+
+
+def test_window_refuses_repeated_units(tmp_path):
+    with pytest.raises(RecipeError, match="Roll that table up"):
+        build_table(_window_plan(tmp_path, "id,start\n1,2024-01-10\n1,2024-01-11\n", EVENTS), tmp_path)
+
+
+def test_ambiguous_dates_must_be_stated(tmp_path):
+    people = "id,start\n1,03/04/2024\n"
+    events = "id,when,amount\n1,2024-03-05,1\n1,2024-04-05,2\n"
+    with pytest.raises(RecipeError, match="could be March or April"):
+        build_table(_window_plan(tmp_path, people, events), tmp_path)
+    march = build_table(_window_plan(tmp_path, people, events, date_order="month_first", days=7), tmp_path)
+    april = build_table(_window_plan(tmp_path, people, events, date_order="day_first", days=7), tmp_path)
+    assert march.table["total"].tolist() == [1.0] and april.table["total"].tolist() == [2.0]
+
+
+def test_day_first_setting_does_not_swap_unambiguous_dates(tmp_path):
+    (tmp_path / "d.csv").write_text("d,v\n03/04/2024,1\n2024-04-05,2\n2024-05-04,3\n")
+    plan = recipe([{"op": "read_table", "file": "d.csv", "header_row": 0, "footer_rows": 0, "into": "t"},
+                   {"op": "filter", "table": "t", "column": "d", "test": "less_than", "value": "2024-04-30",
+                    "compare_as": "date", "date_order": "day_first"}], "t")
+    assert build_table(plan, tmp_path).table["v"].tolist() == ["1", "2"]
+
+
+def test_numeric_style_dates_are_understood(tmp_path):
+    plan = _window_plan(tmp_path, "id,start\n1,20240110\n", "id,when,amount\n1,20240112,3\n")
+    assert build_table(plan, tmp_path).table["total"].tolist() == [3.0]
+
+
+def _sales(tmp_path, body="q,p\n3,1.10\n2,0\n"):
+    (tmp_path / "s.csv").write_text(body)
+    return {"op": "read_table", "file": "s.csv", "header_row": 0, "footer_rows": 0, "into": "s"}
+
+
+def test_calculate_multiplies_without_float_noise(tmp_path):
+    plan = recipe([_sales(tmp_path), {"op": "calculate", "table": "s", "first": "q", "operation": "multiply",
+                                      "second": "p", "into": "revenue"}], "s")
+    assert build_table(plan, tmp_path).table["revenue"].tolist() == [3.3, 0.0]
+
+
+def test_calculate_says_when_it_cannot(tmp_path):
+    plan = recipe([_sales(tmp_path), {"op": "calculate", "table": "s", "first": "q", "operation": "divide",
+                                      "second": "p", "into": "r"}], "s")
+    built = build_table(plan, tmp_path)
+    assert pd.isna(built.table["r"].iloc[1])
+    assert built.log[1]["note"] == "1 row couldn't be calculated and left empty."
+
+
+def test_calculate_refuses_text_and_existing_names(tmp_path):
+    plan = recipe([_sales(tmp_path, "q,p\nabc,1\n"), {"op": "calculate", "table": "s", "first": "q",
+                                                      "operation": "add", "second": "p", "into": "r"}], "s")
+    with pytest.raises(RecipeError, match="needs to be numbers"):
+        build_table(plan, tmp_path)
+    plan = recipe([_sales(tmp_path), {"op": "calculate", "table": "s", "first": "q", "operation": "add",
+                                      "second": "p", "into": "q"}], "s")
+    with pytest.raises(RecipeError, match="already has a column"):
+        build_table(plan, tmp_path)
+
+
+def test_reshape_turns_date_columns_into_rows(tmp_path):
+    (tmp_path / "w.csv").write_text("store,2024-01,2024-02\nA,1,\nB,3,4\n")
+    plan = recipe([{"op": "read_table", "file": "w.csv", "header_row": 0, "footer_rows": 0, "into": "w"},
+                   {"op": "reshape_long", "table": "w", "id_columns": ["store"],
+                    "value_columns": ["2024-01", "2024-02"], "names_to": "month", "values_to": "sales",
+                    "into": "long"}], "long")
+    built = build_table(plan, tmp_path)
+    assert built.table.shape == (4, 3)
+    assert built.table[built.table.store == "B"]["sales"].tolist() == ["3", "4"]
+    assert built.log[1]["note"] == "1 new row with an empty value."
+    assert (built.log[1]["rows_before"], built.log[1]["rows_after"]) == (2, 4)
+
+
+def test_reshape_refuses_a_name_already_in_use(tmp_path):
+    (tmp_path / "w.csv").write_text("store,a\nA,1\n")
+    plan = recipe([{"op": "read_table", "file": "w.csv", "header_row": 0, "footer_rows": 0, "into": "w"},
+                   {"op": "reshape_long", "table": "w", "id_columns": ["store"], "value_columns": ["a"],
+                    "names_to": "store", "values_to": "v", "into": "long"}], "long")
+    with pytest.raises(RecipeError, match="already one of the columns"):
+        build_table(plan, tmp_path)
+
+
 def test_number_comparison_needs_a_stated_type(tmp_path):
     plan = recipe(_two_tables(tmp_path) + [{"op": "filter", "table": "a", "column": "v", "test": "at_least",
                                             "value": "10"}], "a")

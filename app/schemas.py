@@ -271,6 +271,7 @@ class FilterRows(_RecipeStep):
                   "greater_than", "at_least", "less_than", "at_most"]
     value: str
     compare_as: Optional[Literal["number", "date"]] = None
+    date_order: Optional[Literal["day_first", "month_first"]] = None
 
 
 class Measure(BaseModel):
@@ -316,8 +317,61 @@ class FillMissing(_RecipeStep):
     value: str
 
 
+class Calculate(_RecipeStep):
+    op: Literal["calculate"] = "calculate"
+    table: str
+    first: str
+    operation: Literal["multiply", "add", "subtract", "divide"]
+    second: str
+    into: str
+
+
+class ReshapeLong(_RecipeStep):
+    """Turns one column per date (or per item) into one row per date."""
+    op: Literal["reshape_long"] = "reshape_long"
+    table: str
+    id_columns: list[str] = Field(min_length=1)
+    value_columns: list[str] = Field(min_length=1)
+    names_to: str
+    values_to: str
+    into: str
+
+
+class WindowMeasure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    how: Literal["sum", "count_rows", "any_event"]
+    column: Optional[str] = None
+    into: str
+
+    @field_validator("column")
+    @classmethod
+    def _sum_needs_a_column(cls, value, info):
+        if info.data.get("how") == "sum" and not value:
+            raise ValueError("A sum needs a column to add up.")
+        return value
+
+
+class CountWithinWindow(_RecipeStep):
+    """Measures each row's events from its start date. The window length and the no-events value have
+    no defaults on purpose: both can change the result, so the person has to state them."""
+    op: Literal["count_within_window"] = "count_within_window"
+    table: str
+    key: str
+    start_column: str
+    default_start: Optional[str] = Field(default=None, description="Start date for rows without one, "
+                                         "such as the campaign date for people who weren't sent anything")
+    events: str
+    event_key: str
+    event_date: str
+    days: int = Field(ge=1, description="Calendar days in the window, counting the start day")
+    measures: list[WindowMeasure] = Field(min_length=1)
+    no_events_value: str = Field(description="Value for a row with no events in its window")
+    date_order: Optional[Literal["day_first", "month_first"]] = None
+
+
 RecipeStep = Annotated[
-    Union[ReadTable, ChooseColumns, Stack, CleanKey, FilterRows, RollUp, MatchTables, FlagMembership, FillMissing],
+    Union[ReadTable, ChooseColumns, Stack, CleanKey, FilterRows, RollUp, MatchTables, FlagMembership, FillMissing,
+          Calculate, ReshapeLong, CountWithinWindow],
     Field(discriminator="op"),
 ]
 
