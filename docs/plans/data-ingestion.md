@@ -1,7 +1,8 @@
 # Plan: Seamless data ingestion
 
-Status: step 1 in progress. Upload routes, the review screen and hand-built recipes work. AI-proposed
-recipes, the question flow from confirmed answers, and masking identifiers are not built. Written 2026-11-09 against `main` at `23df680`.
+Status: step 1 in progress. Upload routes, the review screen, masking and AI-proposed recipes work.
+AI proposals have only been tested against a stand-in model. Pre-filling the question flow from confirmed
+answers is not built. Written 2026-11-09 against `main` at `23df680`.
 Line numbers below are from that commit and may drift.
 
 ## The problem

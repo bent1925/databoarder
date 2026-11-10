@@ -19,6 +19,7 @@ from .checks import detect_outcome_kind, is_idlike
 from .observational import POST_HINTS, default_covariates
 from .interpret import humanize
 from .design import DESIGNS
+from .privacy import masked_profile
 from .schemas import ABTestSpec, BeforeAfterSpec, DiDSpec, Interpretation, ObservationalSpec
 
 MODEL = os.environ.get("DASHBOARDER_MODEL", "claude-sonnet-5-5")
@@ -357,7 +358,7 @@ def _build_spec(raw: dict, df: pd.DataFrame, design: str | None = None):
 def interpret(question: str, df: pd.DataFrame, design: str | None = None) -> Interpretation:
     notes: list[str] = []
     source = "heuristic"
-    raw = _llm_spec(question, profile_columns(df), design)
+    raw = _llm_spec(question, masked_profile(df, profile_columns(df)), design)
     spec = None
     if raw and "_error" not in raw:
         try:

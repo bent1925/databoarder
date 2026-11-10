@@ -20,6 +20,7 @@ from .ingest import (build_table, inspect_files, preview_recipe, require_compari
 from .schemas import AnySpec, DataRecipe, Mode
 from .observational import covariate_candidates
 from .prep import prepare
+from .proposer import ProposalError, propose
 from .recipe_ops import RecipeError
 from .schemas import ObservationalSpec
 from .security import PasswordGate
@@ -52,6 +53,11 @@ class RunBody(BaseModel):
 
 class PreviewBody(BaseModel):
     recipe: dict
+
+
+class ProposeBody(BaseModel):
+    steps: list[dict]
+    goal: str = ""
 
 
 class ConfirmBody(BaseModel):
@@ -138,6 +144,20 @@ def preview_source(source_id: str, body: PreviewBody):
         return preview_recipe(_recipe(body.recipe), SOURCES.folder(source_id))
     except RecipeError as problem:
         raise HTTPException(404, str(problem))
+
+
+@app.post("/api/sources/{source_id}/propose")
+def propose_steps(source_id: str, body: ProposeBody):
+    """Asks the AI for suggested steps. They come back unconfirmed, for the person to review."""
+    if not body.steps or any(step.get("op") != "read_table" for step in body.steps):
+        raise HTTPException(400, "AI suggestions start from the files you've read, so remove any steps you added first.")
+    recipe = _recipe({"steps": body.steps, "output": body.steps[0].get("into", "")})
+    try:
+        return propose(recipe, SOURCES.folder(source_id), body.goal)
+    except RecipeError as problem:
+        raise HTTPException(400, str(problem))
+    except ProposalError as problem:
+        raise HTTPException(502, str(problem))
 
 
 @app.post("/api/sources/{source_id}/confirm")

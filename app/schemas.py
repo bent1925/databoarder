@@ -244,26 +244,34 @@ class ReadTable(_RecipeStep):
 
 
 class ChooseColumns(_RecipeStep):
+    """Keeps only the listed columns, renamed as given, in that order."""
     op: Literal["choose_columns"] = "choose_columns"
     table: str
     columns: dict[str, str] = Field(min_length=1, description="Current name -> name to use")
 
 
 class Stack(_RecipeStep):
+    """Puts tables on top of each other. They must have exactly the same columns. It doesn't remove overlapping rows."""
     op: Literal["stack"] = "stack"
     tables: list[str] = Field(min_length=1)
     into: str
 
 
 class CleanKey(_RecipeStep):
+    """Makes a cleaned copy of an ID column so IDs written differently can be matched."""
     op: Literal["clean_key"] = "clean_key"
     table: str
     column: str
-    rule: Literal["digits_only", "trim", "lowercase"]
+    rule: Literal["digits_only", "trim", "lowercase"] = Field(description=(
+        "digits_only: drops a trailing .0, keeps only the digits, then removes leading zeros, so C-00123, c00123, "
+        "00123, 123 and 123.0 all become 123. Values with no digits become empty and are counted. "
+        "trim: removes spaces at each end. lowercase: trims, then lowercases."))
     into: str
 
 
 class FilterRows(_RecipeStep):
+    """Keeps only rows passing the test. equals, not_equals and the starts_with tests compare text exactly, including
+    case. The greater_than, at_least, less_than and at_most tests need compare_as set to number or date."""
     op: Literal["filter"] = "filter"
     table: str
     column: str
@@ -282,6 +290,8 @@ class Measure(BaseModel):
 
 
 class RollUp(_RecipeStep):
+    """Makes a new table with one row per value of `by`. Rows with no `by` value are left out and counted. sum ignores
+    empty values. any_positive gives 1 if any value is above zero, otherwise 0."""
     op: Literal["roll_up"] = "roll_up"
     table: str
     by: str
@@ -290,6 +300,8 @@ class RollUp(_RecipeStep):
 
 
 class MatchTables(_RecipeStep):
+    """Adds columns from the right table to the left one, matching on the two keys. Every left row is kept, and rows
+    without a match get empty values. It refuses to run if the right key repeats, so roll the right table up first."""
     op: Literal["match"] = "match"
     left: str
     right: str
@@ -299,6 +311,7 @@ class MatchTables(_RecipeStep):
 
 
 class FlagMembership(_RecipeStep):
+    """Adds a column set to `yes` for rows whose key appears in the other table, and `no` for the rest."""
     op: Literal["flag_membership"] = "flag_membership"
     table: str
     key: str
@@ -310,7 +323,7 @@ class FlagMembership(_RecipeStep):
 
 
 class FillMissing(_RecipeStep):
-    """Has no default on purpose: what an empty value means is the person's decision."""
+    """Replaces empty values in one column with the given value. Only use it when you know what an empty value means."""
     op: Literal["fill_missing"] = "fill_missing"
     table: str
     column: str
@@ -318,6 +331,7 @@ class FillMissing(_RecipeStep):
 
 
 class Calculate(_RecipeStep):
+    """Makes a new column from two number columns. Dividing by zero, or an empty input, gives an empty value."""
     op: Literal["calculate"] = "calculate"
     table: str
     first: str
@@ -352,8 +366,10 @@ class WindowMeasure(BaseModel):
 
 
 class CountWithinWindow(_RecipeStep):
-    """Measures each row's events from its start date. The window length and the no-events value have
-    no defaults on purpose: both can change the result, so the person has to state them."""
+    """For each row, measures its events from its start date through `days` calendar days, counting the start day.
+    Events at or after the start moment count, so with a date-only start every event that day counts. Rows without a
+    start date use default_start if given, and otherwise stay empty. Rows with no events in the window get
+    no_events_value. The key must not repeat in `table`. any_event gives 1 when there's at least one event."""
     op: Literal["count_within_window"] = "count_within_window"
     table: str
     key: str

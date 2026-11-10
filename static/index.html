@@ -202,7 +202,7 @@
       <li>A single CSV is kept in the server's memory while you work. It isn't saved to a database, and it's dropped when the app restarts or newer uploads push it out.</li>
       <li>Files you put together are saved in a temporary folder on the server, and deleted after 6 hours or when newer uploads push them out, whichever comes first.</li>
       <li>The statistics are done by fixed, tested code. The AI never does the math.</li>
-      <li>Only if you type your own question, the AI sees your <b>column names, their types and up to six example values per column</b>. It never sees your full file or your results. Picking a prepared question sends nothing to the AI.</li>
+      <li>Only if you type your own question, or ask for suggested steps, the AI sees your <b>column names, their types and up to six example values per column</b>, with IDs, emails and phone numbers hidden. It never sees your full file or your results. Picking a prepared question sends nothing to the AI.</li>
       <li>Avoid uploading sensitive data to a shared demo.</li></ul></details>
   </section>
 
@@ -216,8 +216,14 @@
     </div>
     <div id="mfound"></div>
     <div id="mbody" class="hidden">
+      <div class="box" id="maibox" style="margin:16px 0 0"><b>🤖 Get help from the AI (optional)</b>
+        <p class="how" style="margin:4px 0 8px">Say what you want to find out, and the AI will suggest the steps. It only sees <b>each table's column names, row counts and a few example values</b>, with IDs, emails and phone numbers hidden. It never sees your rows, and <b>nothing is used until you confirm it</b>.</p>
+        <textarea id="mgoal" placeholder="For example: did the March email get people to buy more within two weeks?" style="min-height:60px"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn soft" id="maibtn">🤖 Suggest steps</button></div>
+      </div>
+      <div id="mai"></div>
       <div class="mhead">The steps</div>
-      <div class="legend">💡 suggested, not yet confirmed · ✅ you confirmed it</div>
+      <div class="legend">🤖 AI suggestion, not yet confirmed · 💡 suggested, not yet confirmed · ✅ you confirmed it</div>
       <div id="msteps"></div>
       <div class="row"><select id="maddop" style="max-width:320px"></select><button class="btn soft" id="maddbtn">➕ Add step</button></div>
       <div id="mform"></div>
@@ -344,7 +350,8 @@ async function showDataset() {
 
 /* ---------- 1b put files together ---------- */
 const M = { id: null, steps: [], tables: {}, texts: [], log: [], error: null, failed: null, edit: null, output: "",
-            rows: null, columns: [], sample: null, unit: "", compare: "group", groupCol: "", timeCol: "", run: 0 };
+            rows: null, columns: [], sample: null, unit: "", compare: "group", groupCol: "", timeCol: "", run: 0,
+            ai: new WeakSet() };
 const WINDOW_HOW = [["any_event", "Yes or no: any event"], ["count_rows", "How many events"], ["sum", "Total of a column"]];
 const ROLL_HOW = [["sum", "Total"], ["mean", "Average"], ["max", "Largest"], ["min", "Smallest"], ["any_positive", "Yes or no: any above zero"], ["count_rows", "How many rows"]];
 const DATE_ORDER = [["month_first", "Month first (03/04 is March 4)"], ["day_first", "Day first (03/04 is April 3)"]];
@@ -418,6 +425,7 @@ $("mfile").onchange = (e) => e.target.files.length && addFiles([...e.target.file
 ["dragleave", "drop"].forEach((t) => $("mdrop").addEventListener(t, (e) => { e.preventDefault(); $("mdrop").classList.remove("over"); }));
 $("mdrop").addEventListener("drop", (e) => e.dataTransfer.files.length && addFiles([...e.dataTransfer.files]));
 $("maddop").innerHTML = Object.entries(OPS).filter(([, o]) => !o.hidden).map(([k, o]) => option(k, o.label)).join("");
+$("maibtn").onclick = askAi;
 $("maddbtn").onclick = () => { M.edit = { index: null, step: { op: $("maddop").value } }; renderForm(); };
 
 async function addFiles(files) {
@@ -430,6 +438,21 @@ async function addFiles(files) {
   M.id = got.source_id; M.steps = got.steps; M.output = ""; M.edit = null;
   $("mdrop").classList.add("hidden"); $("mbody").classList.remove("hidden");
   $("mfound").innerHTML = `<div class="mhead">What we found</div>` + got.tables.map((t) => `<span class="chip">📄 ${esc(t.file)}${t.sheet ? " · " + esc(t.sheet) : ""} · ${t.rows.toLocaleString()} rows · ${t.columns.length} columns</span>`).join("");
+  await refresh();
+}
+
+async function askAi() {
+  const reads = M.steps.filter((s) => s.op === "read_table"), own = M.steps.length - reads.length;
+  if (own && !window.confirm(`This replaces the ${own} step${own === 1 ? "" : "s"} you added after reading your files. Continue?`)) return;
+  const btn = $("maibtn"); busy(btn, true, "Asking the AI…"); $("mai").innerHTML = "";
+  let got;
+  try { got = await post(`/api/sources/${M.id}/propose`, { steps: reads, goal: $("mgoal").value }); }
+  catch (e) { busy(btn, false); $("mai").innerHTML = `<div class="err">😕 ${esc(e.message)}</div>`; return; }
+  busy(btn, false);
+  got.steps.forEach((s) => M.ai.add(s));
+  M.steps = reads.concat(got.steps); M.output = got.output; M.edit = null;
+  $("mai").innerHTML = (got.problem ? `<div class="note">⚠️ ${esc(got.problem)}</div>` : "") + (got.assumptions.length ?
+    `<div class="box caveats" style="margin-top:12px"><b>🤖 The AI assumed these. Please check each one.</b><ul>${got.assumptions.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : "");
   await refresh();
 }
 
@@ -455,8 +478,8 @@ function renderSteps() {
     const ok = s.status === "confirmed", bad = M.failed === i + 1, log = M.log[i];
     let counts = "";
     if (log) counts = log.rows_before ? `${log.rows_before.toLocaleString()} rows → ${log.rows_after.toLocaleString()} rows` : `${log.rows_after.toLocaleString()} rows`;
-    return `<div class="mstep ${ok ? "ok" : ""} ${bad ? "bad" : ""}"><div class="s">${bad ? "❌" : ok ? "✅" : "💡"}</div><div class="body">
-      <div class="tag">Step ${i + 1} · ${ok ? "Confirmed" : "Suggested"}</div>${esc(M.texts[i] || OPS[s.op].label)}
+    return `<div class="mstep ${ok ? "ok" : ""} ${bad ? "bad" : ""}"><div class="s">${bad ? "❌" : ok ? "✅" : M.ai.has(s) ? "🤖" : "💡"}</div><div class="body">
+      <div class="tag">Step ${i + 1} · ${ok ? "Confirmed" : M.ai.has(s) ? "AI suggestion" : "Suggested"}</div>${esc(M.texts[i] || OPS[s.op].label)}
       ${counts ? `<small>📊 ${esc(counts)}</small>` : ""}${log && log.note ? `<small>${esc(log.note)}</small>` : ""}${bad ? `<small style="color:#c0245f">${esc(M.error)}</small>` : ""}
       <div class="acts"><button class="linkish" data-act="toggle" data-i="${i}">${ok ? "↩️ Undo" : "✅ Confirm"}</button><button class="linkish" data-act="edit" data-i="${i}">✏️ Edit</button><button class="linkish" data-act="remove" data-i="${i}">🗑️ Remove</button></div>
     </div></div>`;

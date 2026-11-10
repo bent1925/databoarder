@@ -13,7 +13,7 @@ Ask a business question, upload a CSV, and get a plain-language answer with the 
 6. **Here's your answer.** What was found, how sure we are, and what can't be told from this data.
 7. **Check it, or run it yourself.** Every check, a plain-words explanation of each number, and a script that reproduces the numbers from the raw file.
 
-**What the AI does and doesn't do:** it only turns a typed question into the form in step 5, seeing column names, types and up to six example values per column. All statistics come from fixed, tested code.
+**What the AI does and doesn't do:** it turns a typed question into the form in step 5 and, if you ask, suggests steps for putting files together. It sees column names, types, row counts and up to six example values per column, with IDs, emails and phone numbers masked to show only their format. It never sees your rows, and suggested steps do nothing until you confirm them. All statistics come from fixed, tested code.
 
 ## Screenshots
 (Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
