@@ -5,7 +5,7 @@
 Ask a business question, upload a CSV, and get a plain-language answer with the checks behind it. Every report comes with a script that reproduces each number from the raw file. Covers A/B tests, before/after changes (with or without a comparison group), and comparisons where people chose for themselves.
 
 ## How it works, step by step
-1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed.
+1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed. If you have several files or a messy Excel export, use **Put them together first**: each step is shown in plain words with the rows it keeps or loses, and nothing is used until you've confirmed every step.
 2. **How careful do you need to be?** The method is the same every time. Higher levels add more double-checks.
 3. **How did people end up with the change?** Random split, everyone from a date, some never got it, or they chose. This decides which comparison is fair and how strongly the answer can be worded.
 4. **What do you want to know?** Pick a ready-made question built from your own columns, or type one.
@@ -13,7 +13,7 @@ Ask a business question, upload a CSV, and get a plain-language answer with the 
 6. **Here's your answer.** What was found, how sure we are, and what can't be told from this data.
 7. **Check it, or run it yourself.** Every check, a plain-words explanation of each number, and a script that reproduces the numbers from the raw file.
 
-**What the AI does and doesn't do:** it only turns a typed question into the form in step 5, seeing column names, types and up to six example values per column. All statistics come from fixed, tested code.
+**What the AI does and doesn't do:** it turns a typed question into the form in step 5 and, if you ask, suggests steps for putting files together. It sees column names, types, row counts and up to six example values per column, with IDs, emails and phone numbers masked to show only their format. It never sees your rows, and suggested steps do nothing until you confirm them. All statistics come from fixed, tested code.
 
 ## Screenshots
 (Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
@@ -90,6 +90,6 @@ Each fix is a plain line of code that is also placed at the top of the downloada
 Notes
 - **Single instance.** Uploaded files live in memory (the newest 40 are kept), so don't scale to several instances. The free plan sleeps and forgets uploads; use a paid plan for demos.
 - **Set a spend limit** in the Anthropic Console. The password is what stops strangers using your key.
-- Uploaded CSVs sit on the host's server. Don't use sensitive data in a public demo.
+- Uploaded CSVs sit on the host's server, and files put together are kept in a temporary folder on its disk for up to 6 hours. Don't use sensitive data in a public demo.
 - The same image runs anywhere Docker does: `docker build -t databoarder . && docker run -p 8000:8000 -e APP_PASSWORD=pw databoarder`.
 - Choosing the model: set `DASHBOARDER_MODEL` to override the default.

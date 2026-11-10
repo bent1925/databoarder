@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Discriminator, Field, Tag, field_validator
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, field_validator
 
 
 class ABTestSpec(BaseModel):
@@ -223,3 +223,179 @@ class Report(BaseModel):
     script: str = ""
     series: Optional[dict] = None      # before/after: the daily line for the chart
     spec: Optional[AnySpec] = None
+
+
+# --------------------------------------------------------------------------- the data stage
+
+class _RecipeStep(BaseModel):
+    """One fixed step. Steps start as proposed, and nothing runs until the person has confirmed them all."""
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["proposed", "confirmed"] = "proposed"
+
+
+class ReadTable(_RecipeStep):
+    op: Literal["read_table"] = "read_table"
+    file: str
+    sheet: Optional[str] = None
+    delimiter: str = ","
+    header_row: int = Field(ge=0, description="Position of the row holding the column names, counting from 0")
+    footer_rows: int = Field(ge=0, description="Rows to leave out at the bottom, such as a total line")
+    into: str
+
+
+class ChooseColumns(_RecipeStep):
+    """Keeps only the listed columns, renamed as given, in that order."""
+    op: Literal["choose_columns"] = "choose_columns"
+    table: str
+    columns: dict[str, str] = Field(min_length=1, description="Current name -> name to use")
+
+
+class Stack(_RecipeStep):
+    """Puts tables on top of each other. They must have exactly the same columns. It doesn't remove overlapping rows."""
+    op: Literal["stack"] = "stack"
+    tables: list[str] = Field(min_length=1)
+    into: str
+
+
+class CleanKey(_RecipeStep):
+    """Makes a cleaned copy of an ID column so IDs written differently can be matched."""
+    op: Literal["clean_key"] = "clean_key"
+    table: str
+    column: str
+    rule: Literal["digits_only", "trim", "lowercase"] = Field(description=(
+        "digits_only: drops a trailing .0, keeps only the digits, then removes leading zeros, so C-00123, c00123, "
+        "00123, 123 and 123.0 all become 123. Values with no digits become empty and are counted. "
+        "trim: removes spaces at each end. lowercase: trims, then lowercases."))
+    into: str
+
+
+class FilterRows(_RecipeStep):
+    """Keeps only rows passing the test. equals, not_equals and the starts_with tests compare text exactly, including
+    case; numbers made by earlier steps are written plainly first, so 10.0 matches "10". With compare_as set to number
+    or date, equals and not_equals compare values instead, so 10.00 matches 10. An empty value never equals anything.
+    The greater_than, at_least, less_than and at_most tests need compare_as set to number or date."""
+    op: Literal["filter"] = "filter"
+    table: str
+    column: str
+    test: Literal["equals", "not_equals", "starts_with", "not_starts_with",
+                  "greater_than", "at_least", "less_than", "at_most"]
+    value: str
+    compare_as: Optional[Literal["number", "date"]] = None
+    date_order: Optional[Literal["day_first", "month_first"]] = None
+
+
+class Measure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    how: Literal["sum", "mean", "max", "min", "any_positive", "count_rows"]
+    column: Optional[str] = None
+    into: str
+
+
+class RollUp(_RecipeStep):
+    """Makes a new table with one row per value of `by`. Rows with no `by` value are left out and counted. sum ignores
+    empty values. any_positive gives 1 if any value is above zero, otherwise 0."""
+    op: Literal["roll_up"] = "roll_up"
+    table: str
+    by: str
+    measures: list[Measure] = Field(min_length=1)
+    into: str
+
+
+class MatchTables(_RecipeStep):
+    """Adds columns from the right table to the left one, matching on the two keys. Every left row is kept, and rows
+    without a match get empty values. It refuses to run if the right key repeats, so roll the right table up first."""
+    op: Literal["match"] = "match"
+    left: str
+    right: str
+    left_key: str
+    right_key: str
+    bring: dict[str, str] = Field(min_length=1, description="Column in the right table -> name to use")
+
+
+class FlagMembership(_RecipeStep):
+    """Adds a column set to `yes` for rows whose key appears in the other table, and `no` for the rest."""
+    op: Literal["flag_membership"] = "flag_membership"
+    table: str
+    key: str
+    other: str
+    other_key: str
+    into: str
+    yes: str
+    no: str
+
+
+class FillMissing(_RecipeStep):
+    """Replaces empty values in one column with the given value. Only use it when you know what an empty value means."""
+    op: Literal["fill_missing"] = "fill_missing"
+    table: str
+    column: str
+    value: str
+
+
+class Calculate(_RecipeStep):
+    """Makes a new column from two number columns. Dividing by zero, or an empty input, gives an empty value."""
+    op: Literal["calculate"] = "calculate"
+    table: str
+    first: str
+    operation: Literal["multiply", "add", "subtract", "divide"]
+    second: str
+    into: str
+
+
+class ReshapeLong(_RecipeStep):
+    """Turns one column per date (or per item) into one row per date."""
+    op: Literal["reshape_long"] = "reshape_long"
+    table: str
+    id_columns: list[str] = Field(min_length=1)
+    value_columns: list[str] = Field(min_length=1)
+    names_to: str
+    values_to: str
+    into: str
+
+
+class WindowMeasure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    how: Literal["sum", "count_rows", "any_event"]
+    column: Optional[str] = None
+    into: str
+
+    @field_validator("column")
+    @classmethod
+    def _sum_needs_a_column(cls, value, info):
+        if info.data.get("how") == "sum" and not value:
+            raise ValueError("A sum needs a column to add up.")
+        return value
+
+
+class CountWithinWindow(_RecipeStep):
+    """For each row, measures its events from its start date through `days` calendar days, counting the start day.
+    Events at or after the start moment count, so with a date-only start every event that day counts. Rows without a
+    start date use default_start if given, and otherwise stay empty. Rows with no events in the window get
+    no_events_value. The key must not repeat in `table`. any_event gives 1 when there's at least one event."""
+    op: Literal["count_within_window"] = "count_within_window"
+    table: str
+    key: str
+    start_column: str
+    default_start: Optional[str] = Field(default=None, description="Start date for rows without one, "
+                                         "such as the campaign date for people who weren't sent anything")
+    events: str
+    event_key: str
+    event_date: str
+    days: int = Field(ge=1, description="Calendar days in the window, counting the start day")
+    measures: list[WindowMeasure] = Field(min_length=1)
+    no_events_value: str = Field(description="Value for a row with no events in its window")
+    date_order: Optional[Literal["day_first", "month_first"]] = None
+
+
+RecipeStep = Annotated[
+    Union[ReadTable, ChooseColumns, Stack, CleanKey, FilterRows, RollUp, MatchTables, FlagMembership, FillMissing,
+          Calculate, ReshapeLong, CountWithinWindow],
+    Field(discriminator="op"),
+]
+
+
+class DataRecipe(BaseModel):
+    """How messy files become one analysis table. It is plain data: fixed code carries out each step."""
+    model_config = ConfigDict(extra="forbid")
+    steps: list[RecipeStep] = Field(min_length=1)
+    output: str = Field(description="Name of the table that becomes the analysis table")
