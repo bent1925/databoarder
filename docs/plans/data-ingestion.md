@@ -36,7 +36,7 @@ already have one row per person, order or day.
 
 ## Order of work
 
-0. Collect real pulls
+0. Test data: public stand-ins now, real pulls when available
 1. Data stage: many files in, one confirmed frozen table out
 2. Analyst data request and "what's missing" message
 3. Record the analyst's query
@@ -58,11 +58,89 @@ that analysis first.
   explicit question or rule below.
 - **Consequential choices must be explained, and errors must say how to proceed.**
 
-## Step 0: Collect real pulls
+## Step 0: Test data
 
-Before building the recipe steps, get two or three real campaign pulls from an analyst, anonymized if
-needed. Note the file types, sizes, shapes, ID columns and whether non-treated people are included.
-These pulls decide which recipe steps come first, set the size limit, and become test fixtures.
+No real analyst pull is available yet, so two public datasets stand in for one. They do different
+jobs, and neither replaces a real pull.
+
+| | Hillstrom email test | UCI Online Retail II |
+|---|---|---|
+| **Role** | A fake analyst pull we build ourselves | One real retailer's transaction log |
+| **Question it answers** | Does the data stage rebuild the correct table? | Does it cope with mess nobody planted? |
+| **Known right answer?** | Yes | No |
+| **Campaign or treatment?** | Yes, randomized | No |
+| **Messiness** | Planted by us | Comes with the data |
+| **License** | Not confirmed, so nothing derived from it is committed | CC BY 4.0, with credit |
+
+### Hillstrom: a fake analyst pull with an answer key
+
+**What it is.** The public Hillstrom file is one clean table of 64,000 customers, randomly assigned to
+a men's email, a women's email or no email. `tools/make_messy_hillstrom.py` deliberately breaks it into
+the kind of messy files an analyst might hand over. It is a simulation of an analyst's pull. No analyst
+produced it.
+
+**Real versus invented.** Customer attributes, assigned email, visits, purchases and each customer's
+total spend are real and unchanged. Customer IDs, ID formats, file layout, all dates, order numbers
+and how spend divides across orders are invented by the script.
+
+**What "the right answer" means.** There are two levels, and they shouldn't be confused:
+- The original file, plus an ID, is the correct **table**. The data stage must rebuild it exactly from
+  the messy pieces. This is the pass/fail test.
+- Comparisons computed from that table are the expected **numbers**. Emails were randomly assigned, so
+  these are valid estimates with uncertainty. They are not the exact true effect of the email. If the
+  table is right, the numbers follow.
+
+**Planted problems.** Excel title and total rows; the same customer written four ways across files; an
+email list that holds only emailed people; non-buyers and non-visitors absent from their files; and one
+row per order. A second version holds only emailed people, and must stop with the "no comparison
+group" explanation.
+
+**What passing does not prove.** We planted these problems, so passing shows the tool handles the ones
+we thought of. It says nothing about how large or strange a real pull is.
+
+To build it: download the file named in the script, then run the command in its docstring. Output goes
+to `local_data/`, which git ignores. The `answer_key/` folder must never be given to the data stage.
+
+### Online Retail II: real retailer data
+
+[UCI dataset 502](https://archive.ics.uci.edu/dataset/502/online+retail+ii), licensed CC BY 4.0. Credit:
+Chen, D. (2012). Online Retail II [Dataset]. UCI Machine Learning Repository.
+https://doi.org/10.24432/C5CG6D.
+
+Download `https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip` (zip sha256
+`572e36277c2390fbfde10664750731e0a86f55e33470d91919085f0408e67bfb`). It holds one Excel workbook with
+1,067,371 rows covering December 2009 to December 2011. The workbook is too large for the repo, so
+keep it in `local_data/`. Small excerpts can be committed as test fixtures with the credit above.
+
+**What it is for.** Real mess from a real business. It has no campaign, no treatment and no answer
+key, so it can't test comparison-group questions. Results from it must not be presented as a validation
+or as evidence of any effect. A simulated campaign with a known effect could be added later, labeled
+as simulated.
+
+**What profiling found:**
+- **Two year sheets that overlap.** 1 to 9 December 2010 appears in both, about 22,500 rows. Stacking
+  the sheets double-counts them. Removing every exact duplicate isn't the fix either: the stacked data
+  has 34,335 exact repeats, more than the overlap explains, and some may be genuine repeat lines. The
+  overlap should be resolved by date range, and the user should decide about the rest.
+- **The unit is a product on an invoice,** with a median of 53 rows per customer.
+- **Cancellations and returns.** 19,494 rows are on invoices starting with `C`, usually with negative
+  quantity. Another 3,457 rows have negative quantity without being on a cancellation invoice. Whether
+  these count against spend changes the outcome, so it needs a question.
+- **No customer ID on 22.8% of rows.** Those rows can't be tied to a person.
+- **IDs read as numbers,** so a customer appears as `13085.0`.
+- **Lines that aren't products:** stock codes such as `POST`, `DOT`, `BANK CHARGES`, `ADJUST` and
+  `AMAZONFEE`. A spend total has to decide whether they count.
+- **Odd prices:** 6,207 rows have a price of zero or less.
+- **Size:** 45.6 MB as Excel, about 95 MB as CSV and 332 MB in pandas.
+
+**How the current app handles it, as a baseline to beat:** the workbook is rejected as over 25 MB. A
+small Excel file fails with "Couldn't read that as a CSV file." A 20 MB CSV slice is accepted as 224,951
+product-line rows, and before/after is offered without the unit being settled.
+
+### Still needed from a real pull
+
+Get one when possible, anonymized if needed. Only a real pull can settle the size limit, what analysts
+actually send, and whether non-treated people are usually included.
 
 ## Step 1: The data stage
 
@@ -172,6 +250,11 @@ Render's starter plan (`app/main.py:28-32`, `render.yaml`).
   that `read_csv` then opens.
 - `static/index.html`: the new screens and a "where this data came from" report section.
 - `requirements.txt`: add `openpyxl` for Excel.
+
+### Other formats to recognize
+
+Dates written as `YYYYMMDD` numbers (the app currently says "Needs a date column"), IDs ruined by
+scientific notation such as `9.941E+14`, and codes such as `XX` that stand for missing values.
 
 ### What gets recorded
 
