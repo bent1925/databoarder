@@ -204,7 +204,7 @@ if n_b > 4 and n_a > 4:                   # only the 4 weeks nearest the date
 
 obs = cal.dropna()                        # every day, weekday indicators, Newey-West errors
 X = np.column_stack([np.ones(len(obs)), (obs.index >= change).astype(float),
-                     pd.get_dummies(obs.index.weekday, drop_first=True).to_numpy(float)])
+                     pd.get_dummies(obs.index.day_of_week, drop_first=True).to_numpy(float)])
 if len(obs) >= 28 and np.linalg.matrix_rank(X) == X.shape[1]:
     fit = sm.OLS(obs.to_numpy(float), X).fit(cov_type="HAC", cov_kwds={"maxlags": 7, "use_correction": True}, use_t=True)
     print(f"daily_diff={fit.params[1]:.4f} daily_p={fit.pvalues[1]:.5f}")

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main, sources
-from app.schemas import ABTestSpec
+from app.schemas import ABTestSpec, ObservationalSpec
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("test_ingest_helpers", ROOT / "tests" / "test_ingest.py")
@@ -244,22 +244,39 @@ def hillstrom_pull(tmp_path):
     return tmp_path, answer
 
 
-def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hillstrom_pull, tmp_path_factory):
-    folder, answer = hillstrom_pull
+JOURNEY_SPECS = {
+    "random": ABTestSpec(group_col="segment", control="No E-Mail", treatment="Mens E-Mail", outcome_col="visit"),
+    "chose": ObservationalSpec(group_col="segment", control="No E-Mail", treatment="Mens E-Mail", outcome_col="spend",
+                               covariates=["recency", "history", "newbie"]),
+}
+
+
+def _confirm_hillstrom(folder):
     uploads = [("files", (path.name, path.read_bytes(), "application/octet-stream")) for path in sorted(folder.iterdir())]
     got = client.post("/api/sources", files=uploads).json()
     customer = next(s for s in got["steps"] if s["file"] == tool.XLSX_NAME)
     assert (customer["header_row"], customer["footer_rows"]) == (3, 2)
-
-    result = client.post(f"/api/sources/{got['source_id']}/confirm", json={
+    return client.post(f"/api/sources/{got['source_id']}/confirm", json={
         "recipe": {"steps": confirmed(helpers.hillstrom_steps()), "output": "customers"},
         "unit_column": "customer_id", "group_column": "emailed"}).json()
-    spec = ABTestSpec(group_col="segment", control="No E-Mail", treatment="Mens E-Mail", outcome_col="visit").model_dump()
-    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": "quick"}).json()
+
+
+def _numbers(text):
+    return re.findall(r"-?\d+\.\d+", text)
+
+
+@pytest.mark.parametrize("mode", ["quick", "right_answer", "research"])
+@pytest.mark.parametrize("design", ["random", "chose"])
+def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hillstrom_pull, tmp_path_factory,
+                                                                             mode, design):
+    folder, answer = hillstrom_pull
+    result = _confirm_hillstrom(folder)
+    spec = JOURNEY_SPECS[design].model_dump()
+    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": mode}).json()
 
     frozen = client.get(f"/api/datasets/{result['dataset_id']}/snapshot").content
     plain_id = client.post("/api/upload", files={"file": (main.FROZEN_NAME, frozen, "text/csv")}).json()["dataset_id"]
-    plain = client.post("/api/run", json={"dataset_id": plain_id, "spec": spec, "mode": "quick"}).json()
+    plain = client.post("/api/run", json={"dataset_id": plain_id, "spec": spec, "mode": mode}).json()
     assert report["effect"] == plain["effect"]
     assert report["repro"]["source"]["table_sha256"] == report["repro"]["data_sha256"]
     assert len(report["repro"]["source"]["inputs"]) == 4
@@ -272,7 +289,55 @@ def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hi
     (other / main.FROZEN_NAME).write_bytes(frozen)
     (other / "repro.py").write_text(plain["script"])
     direct = subprocess.run([sys.executable, "repro.py"], cwd=other, check=True, capture_output=True, text=True)
-    assert rebuilt.stdout == direct.stdout and re.search(r"\d", rebuilt.stdout)
+    assert rebuilt.stdout == direct.stdout
+    effect = report["effect"]
+    printed = {float(n) for n in _numbers(rebuilt.stdout)}
+    for key in ("diff", "ci_low", "ci_high"):
+        assert any(abs(n - effect[key]) < 1e-3 for n in printed), (key, effect[key], rebuilt.stdout)
+
+
+def _hillstrom_script(folder):
+    result = _confirm_hillstrom(folder)
+    spec = JOURNEY_SPECS["random"].model_dump()
+    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": "quick"}).json()
+    (folder / "repro.py").write_text(report["script"])
+    return report
+
+
+def test_script_stops_when_an_original_file_has_changed(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    changed = folder / report["repro"]["source"]["inputs"][0]["file"]
+    changed.write_bytes(changed.read_bytes() + b"\n")
+    run = subprocess.run([sys.executable, "repro.py"], cwd=folder, capture_output=True, text=True)
+    assert run.returncode != 0 and "isn't the same file the report used" in run.stderr
+    assert not (folder / main.FROZEN_NAME).exists()
+
+
+def test_script_stops_when_an_original_file_is_missing(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    (folder / report["repro"]["source"]["inputs"][-1]["file"]).unlink()
+    run = subprocess.run([sys.executable, "repro.py"], cwd=folder, capture_output=True, text=True)
+    assert run.returncode != 0 and "isn't in this folder" in run.stderr
+
+
+def test_script_stops_when_the_rebuilt_table_differs(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    script = report["script"].replace(f"TABLE_SHA256 = {report['repro']['source']['table_sha256']!r}",
+                                      "TABLE_SHA256 = '0' * 64")
+    (folder / "repro.py").write_text(script)
+    run = subprocess.run([sys.executable, "repro.py"], cwd=folder, capture_output=True, text=True)
+    assert run.returncode != 0 and "doesn't match the one the report analyzed" in run.stderr
+
+
+def test_report_records_the_excel_reader_version(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    import openpyxl
+    assert report["repro"]["source"]["versions"] == {"openpyxl": openpyxl.__version__}
+    assert f"openpyxl {openpyxl.__version__}" in report["script"]
 
 
 def test_confirmed_labels_reach_the_analysis_and_the_script_unchanged(tmp_path):

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from .analysis import analyze
-from .ingest import (FROZEN_NAME, build_table, inspect_files, preview_recipe, read_frozen, require_comparison,
+from .ingest import (FROZEN_NAME, openpyxl_version, build_table, inspect_files, preview_recipe, read_frozen, require_comparison,
                      require_one_row_per_unit, require_time_span, script_block, suggest_read_steps)
 from .schemas import AnySpec, DataRecipe, Mode
 from .observational import covariate_candidates
@@ -192,10 +192,11 @@ def confirm_source(source_id: str, body: ConfirmBody):
     if len(built.csv_bytes) > MAX_BYTES:
         raise HTTPException(413, "The finished table is larger than 25 MB. Roll it up or keep fewer columns.")
     source = {"kind": "recipe", "inputs": built.inputs, "recipe": recipe.model_dump(), "table_sha256": built.sha256,
-              "table_file": built.name, "read_options": built.read_options,
+              "table_file": built.name, "read_options": built.read_options, "versions": {"openpyxl": openpyxl_version()},
               "unit_column": body.unit_column, "group_column": body.group_column, "time_column": body.time_column,
               "steps": [{key: entry[key] for key in ("text", "rows_before", "rows_after", "note")} for entry in built.log]}
-    result = _ingest(built.csv_bytes, built.name, source, script_block(recipe, built.name), df=table, check=check)
+    script = script_block(recipe, built.name, built.inputs, built.sha256)
+    result = _ingest(built.csv_bytes, built.name, source, script, df=table, check=check)
     path = SOURCES.snapshot_path(source_id, result["dataset_id"])
     path.write_bytes(built.csv_bytes)
     DATASETS[result["dataset_id"]]["snapshot_path"] = path

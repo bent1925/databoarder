@@ -266,15 +266,63 @@ def preview_recipe(recipe: DataRecipe, folder: Path, sample_rows: int = 20) -> d
             "sample": sample}
 
 
-def script_block(recipe: DataRecipe, snapshot_name: str = FROZEN_NAME) -> str:
-    """A standalone section of Python that rebuilds the frozen table from the original files."""
+_FINGERPRINT_CHECKS = '''
+import hashlib as _hashlib
+import os as _os
+
+
+def _sha256(raw):
+    return _hashlib.sha256(raw).hexdigest()
+
+
+def check_original_files(expected):
+    """Stops before anything is built if an original file is missing or isn't the one the report used."""
+    for _item in expected:
+        if not _os.path.isfile(_item["file"]):
+            raise SystemExit(f"{_item['file']} isn't in this folder. Put the original files next to this script "
+                             "and run it again.")
+        with open(_item["file"], "rb") as _source:
+            if _sha256(_source.read()) != _item["sha256"]:
+                raise SystemExit(f"{_item['file']} isn't the same file the report used, so the results could differ. "
+                                 "Use the file exactly as it was uploaded, or build and analyze the new one in the app.")
+
+
+def check_built_table(raw, expected):
+    """Stops if the rebuilt table differs from the one the report analyzed."""
+    if _sha256(raw) != expected:
+        raise SystemExit("The rebuilt table doesn't match the one the report analyzed, so the results could differ. "
+                         "Check that your library versions match the ones listed in this script.")
+'''
+
+
+def openpyxl_version() -> str:
+    try:
+        import openpyxl
+        return openpyxl.__version__
+    except ImportError:
+        return "(not installed)"
+
+
+def script_block(recipe: DataRecipe, snapshot_name: str = FROZEN_NAME, inputs: Optional[list[dict]] = None,
+                 table_sha256: Optional[str] = None) -> str:
+    """A standalone section of Python that rebuilds the frozen table from the original files.
+
+    With the recorded fingerprints, it stops instead of reporting numbers from different files or a different table."""
     dumped = recipe.model_dump()
     steps = "\n".join(f"# {number}. {_one_line(describe(step))}" for number, step in enumerate(recipe.steps, 1))
+    checked = inputs is not None and table_sha256 is not None
     return (f"# --- Building the analysis table from the original files ---\n"
-            f"# Run this script in a folder that holds the original files.\n{steps}\n\n"
-            f"{RUNTIME_SOURCE.read_text()}\n\n"
-            f"RECIPE = {pprint.pformat(dumped, sort_dicts=False)}\n\n"
-            f"_table, _log = run_recipe(RECIPE, '.')\n"
-            f"with open({snapshot_name!r}, 'wb') as _handle:\n"
-            f"    _handle.write(freeze(_table))\n"
+            f"# Run this script in a folder that holds the original files.\n"
+            f"# Excel files were read with openpyxl {openpyxl_version()}.\n{steps}\n\n"
+            f"{RUNTIME_SOURCE.read_text()}\n"
+            + (f"{_FINGERPRINT_CHECKS}\n" if checked else "\n")
+            + f"RECIPE = {pprint.pformat(dumped, sort_dicts=False)}\n\n"
+            + (f"ORIGINAL_FILES = {pprint.pformat(inputs, sort_dicts=False)}\n"
+               f"TABLE_SHA256 = {table_sha256!r}\n"
+               f"check_original_files(ORIGINAL_FILES)\n\n" if checked else "")
+            + "_table, _log = run_recipe(RECIPE, '.')\n"
+            + ("_frozen = freeze(_table)\ncheck_built_table(_frozen, TABLE_SHA256)\n" if checked
+               else "_frozen = freeze(_table)\n")
+            + f"with open({snapshot_name!r}, 'wb') as _handle:\n"
+            f"    _handle.write(_frozen)\n"
             f"READ_OPTIONS = read_options(_table)    # read it back exactly as the app did\n")
