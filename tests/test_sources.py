@@ -369,3 +369,79 @@ def test_an_original_named_like_the_finished_table_is_not_overwritten():
 def test_page_has_the_new_screen():
     page = client.get("/").text
     assert 'id="m1"' in page and "Put them together first" in page
+
+
+# ------------------------------------------------- answers from building the table carry into the question
+
+# 'cohort' looks like a group column by name, but the person says 'got_email' shows who got the campaign.
+EMAILED = "id,cohort,got_email,signup_date,spend\n" + "".join(
+    f"{i},{'spring' if i % 3 else 'fall'},{'yes' if i % 2 else 'no'},2024-03-{1 + i % 20:02d},{(i * 7) % 50}\n"
+    for i in range(1, 81))
+
+
+def _built(group=None, time_column=None):
+    got = add(csv_file("people.csv", EMAILED))
+    response = confirm(got["source_id"], confirmed(got["steps"]), unit="id", group=group, time_column=time_column)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_plain_upload_has_nothing_confirmed():
+    result = client.post("/api/upload", files={"file": ("people.csv", EMAILED.encode(), "text/csv")}).json()
+    assert result["confirmed"] is None
+    first = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design=random").json()
+    assert first["questions"][0]["spec"]["group_col"] == "cohort"     # without an answer, the name is a guess
+
+
+def test_confirmed_group_column_is_used_for_every_suggestion():
+    result = _built(group="got_email")
+    assert result["confirmed"] == {"group_col": "got_email", "date_col": None}
+    for design in ("random", "chose", "unsure", "one_date_comparison"):
+        questions = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design={design}").json()
+        assert questions["questions"], design
+        assert {q["spec"]["group_col"] for q in questions["questions"]} == {"got_email"}, design
+
+
+def test_confirmed_group_column_makes_comparing_groups_the_starting_point():
+    designs = _built(group="got_email")["designs"]
+    assert designs["default"] == "chose"           # they weren't asked how people were picked, so don't assume random
+    assert all(option["ok"] for option in designs["options"])
+
+
+def test_typed_question_uses_the_confirmed_group_without_ai():
+    result = _built(group="got_email")
+    interp = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "Did spend go up?",
+                                            "design": "random"}).json()
+    assert interp["spec"]["group_col"] == "got_email"
+    assert interp["spec"]["outcome_col"] == "spend"
+
+
+def test_ai_cannot_quietly_swap_the_confirmed_group(monkeypatch):
+    from app import translator
+    seen = {}
+
+    def fake(question, profile, design, confirmed=None):
+        seen["confirmed"] = confirmed
+        return {"analysis_type": "ab_test", "group_col": "cohort", "control": "fall", "treatment": "spring",
+                "outcome_col": "spend"}
+
+    monkeypatch.setattr(translator, "_llm_spec", fake)
+    result = _built(group="got_email")
+    interp = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "Did spring spend more?",
+                                            "design": "random"}).json()
+    assert seen["confirmed"]["group_col"] == "got_email"
+    assert interp["spec"]["group_col"] == "got_email"
+    assert any("you said 'got_email' shows who got the campaign" in note for note in interp["notes"])
+
+
+def test_everyone_got_it_rules_out_group_comparisons_and_uses_the_chosen_date():
+    result = _built(time_column="signup_date")
+    assert result["confirmed"] == {"group_col": None, "date_col": "signup_date"}
+    options = {option["key"]: option for option in result["designs"]["options"]}
+    assert result["designs"]["default"] == "one_date" and options["one_date"]["ok"]
+    for key in ("random", "chose", "unsure", "one_date_comparison"):
+        assert not options[key]["ok"] and "everyone got the campaign" in options[key]["why"]
+    refused = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "x", "design": "random"})
+    assert refused.status_code == 400
+    questions = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design=one_date").json()
+    assert {q["spec"]["date_col"] for q in questions["questions"]} == {"signup_date"}

@@ -125,7 +125,8 @@ def _readback_obs(df: pd.DataFrame, spec: ObservationalSpec) -> str:
 
 # ----------------------------------------------------------------------------- LLM
 
-def _llm_spec(question: str, profile: list[dict], design: str | None = None) -> dict | None:
+def _llm_spec(question: str, profile: list[dict], design: str | None = None,
+              confirmed: dict | None = None) -> dict | None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return None
     try:
@@ -164,6 +165,12 @@ def _llm_spec(question: str, profile: list[dict], design: str | None = None) -> 
         if design:
             fixed = (f"The person already said how people got the change: \"{DESIGNS[design]['label']}\". "
                      f"Use analysis_type = {DESIGNS[design]['analysis']}.\n\n")
+        if _confirmed_group(confirmed):
+            fixed += (f"The person confirmed that the column '{confirmed['group_col']}' says who got the change. "
+                      "Use it as group_col.\n\n")
+        elif (confirmed or {}).get("date_col"):
+            fixed += (f"The person confirmed that everyone got the change, and that '{confirmed['date_col']}' is the "
+                      "date column. Use it as date_col.\n\n")
         msg = client.messages.create(
             model=MODEL, max_tokens=800, tools=[tool],
             # This model does not accept a forced tool_choice, so the prompt asks for the tool and we check for it.
@@ -193,7 +200,24 @@ def _has_ab_structure(df: pd.DataFrame, group: str) -> bool:
     return any(CONTROL_HINTS.search(str(v)) for v in df[group].dropna().unique()[:10])
 
 
-def _group_choice(df: pd.DataFrame) -> str | None:
+def _confirmed_group(confirmed: dict | None) -> str | None:
+    return (confirmed or {}).get("group_col") or None
+
+
+def _confirmed_dates(df: pd.DataFrame, confirmed: dict | None) -> list[str]:
+    """Date columns, with the one the person chose while building the table first."""
+    dcols = date_columns(df)
+    chosen = (confirmed or {}).get("date_col")
+    if chosen and chosen in df.columns:
+        return [chosen] + [c for c in dcols if c != chosen]
+    return dcols
+
+
+def _group_choice(df: pd.DataFrame, confirmed: dict | None = None) -> str | None:
+    """The column that splits people into groups. One the person confirmed always wins over a guess."""
+    chosen = _confirmed_group(confirmed)
+    if chosen and chosen in df.columns:
+        return chosen
     n = len(df)
     cols = list(df.columns)
 
@@ -232,8 +256,9 @@ def _outcome_choice(df: pd.DataFrame, question: str, exclude: tuple = ()) -> str
     return (best or [df.columns[-1]])[0]
 
 
-def _ab_heuristic(question: str, df: pd.DataFrame, analysis: str = "ab_test", assignment: str = "chose") -> dict:
-    group = _group_choice(df) or df.columns[0]
+def _ab_heuristic(question: str, df: pd.DataFrame, analysis: str = "ab_test", assignment: str = "chose",
+                  confirmed: dict | None = None) -> dict:
+    group = _group_choice(df, confirmed) or df.columns[0]
     control, treatment = _levels_pair(df, group, question)
     outcome = _outcome_choice(df, question, (group,))
     out = {"analysis_type": analysis, "group_col": group, "control": control, "treatment": treatment,
@@ -268,8 +293,9 @@ def find_date_in_text(question: str, df_dates: pd.Series) -> str:
     return ""
 
 
-def _ba_heuristic(question: str, df: pd.DataFrame, date_col: str, with_group: bool = False) -> dict:
-    group = _group_choice(df) if with_group else None
+def _ba_heuristic(question: str, df: pd.DataFrame, date_col: str, with_group: bool = False,
+                  confirmed: dict | None = None) -> dict:
+    group = _group_choice(df, confirmed) if with_group else None
     outcome = _outcome_choice(df, question, tuple(c for c in (date_col, group) if c))
     dates = parse_dates(df[date_col]).dropna()
     out = {"analysis_type": "before_after", "date_col": date_col, "outcome_col": outcome,
@@ -280,27 +306,27 @@ def _ba_heuristic(question: str, df: pd.DataFrame, date_col: str, with_group: bo
     return out
 
 
-def _heuristic_for_design(question: str, df: pd.DataFrame, design: str) -> dict:
+def _heuristic_for_design(question: str, df: pd.DataFrame, design: str, confirmed: dict | None = None) -> dict:
     if design == "random":
-        return _ab_heuristic(question, df)
+        return _ab_heuristic(question, df, confirmed=confirmed)
     if design in ("chose", "unsure"):
-        return _ab_heuristic(question, df, "observational", design)
-    dcols = date_columns(df)
+        return _ab_heuristic(question, df, "observational", design, confirmed=confirmed)
+    dcols = _confirmed_dates(df, confirmed)
     if design == "one_date":
-        return _ba_heuristic(question, df, dcols[0])
-    return _ba_heuristic(question, df, dcols[0], with_group=True)
+        return _ba_heuristic(question, df, dcols[0], confirmed=confirmed)
+    return _ba_heuristic(question, df, dcols[0], with_group=True, confirmed=confirmed)
 
 
-def _pick_heuristic(question: str, df: pd.DataFrame) -> dict:
-    dcols = date_columns(df)
-    group = _group_choice(df)
-    ab_ok = group is not None and _has_ab_structure(df, group)
+def _pick_heuristic(question: str, df: pd.DataFrame, confirmed: dict | None = None) -> dict:
+    dcols = _confirmed_dates(df, confirmed)
+    group = _group_choice(df, confirmed)
+    ab_ok = group is not None and (_has_ab_structure(df, group) or bool(_confirmed_group(confirmed)))
     if dcols:
         dates = parse_dates(df[dcols[0]]).dropna()
         typed_date = bool(len(dates)) and bool(find_date_in_text(question, dates))
         if bool(TIME_WORDS.search(question)) or typed_date or not ab_ok:
-            return _ba_heuristic(question, df, dcols[0])
-    return _ab_heuristic(question, df)
+            return _ba_heuristic(question, df, dcols[0], confirmed=confirmed)
+    return _ab_heuristic(question, df, confirmed=confirmed)
 
 
 # ------------------------------------------------------------------ how people got it
@@ -308,16 +334,27 @@ def _pick_heuristic(question: str, df: pd.DataFrame) -> dict:
 STRICT_AB_NAME = re.compile(r"variant|experiment|\bab\b|a_b|bucket|cell|test_?group|\barm\b|assign", re.I)
 
 
-def design_options(df: pd.DataFrame) -> dict:
-    """Which 'how did people get it?' answers the file can support, and the likeliest one."""
-    group, dcols = _group_choice(df), date_columns(df)
+def design_options(df: pd.DataFrame, confirmed: dict | None = None) -> dict:
+    """Which 'how did people get it?' answers the file can support, and the likeliest one.
+
+    `confirmed` holds what the person decided while building the table: the column saying who got the campaign
+    (group_col), or, when everyone got it, the date column (date_col). Those decisions narrow the options."""
+    everyone = bool((confirmed or {}).get("date_col")) and not _confirmed_group(confirmed)
+    group = None if everyone else _group_choice(df, confirmed)
+    dcols = _confirmed_dates(df, confirmed)
     need_group, need_date = "Needs a column that splits people into groups.", "Needs a date column."
+    if everyone:
+        need_group = "When you built this table, you said everyone got the campaign."
     ok = {"random": bool(group), "chose": bool(group), "unsure": bool(group), "one_date": bool(dcols),
           "one_date_comparison": bool(group and dcols)}
     why = {"random": need_group, "chose": need_group, "unsure": need_group, "one_date": need_date,
            "one_date_comparison": need_group if not group else need_date}
     default = None
-    if group and dcols:
+    if _confirmed_group(confirmed) and group:
+        # They said this column shows who got the campaign, so compare groups. How people ended up in each group
+        # wasn't asked yet, so only a name that says "assigned" suggests random; otherwise assume they chose.
+        default = "random" if STRICT_AB_NAME.search(group) else "chose"
+    elif group and dcols:
         if SELF_HINTS.search(group):
             default = "chose"
         elif STRICT_AB_NAME.search(group):
@@ -355,10 +392,12 @@ def _build_spec(raw: dict, df: pd.DataFrame, design: str | None = None):
                       outcome_col=raw["outcome_col"])
 
 
-def interpret(question: str, df: pd.DataFrame, design: str | None = None) -> Interpretation:
+def interpret(question: str, df: pd.DataFrame, design: str | None = None,
+              confirmed: dict | None = None) -> Interpretation:
     notes: list[str] = []
     source = "heuristic"
-    raw = _llm_spec(question, masked_profile(df, profile_columns(df)), design)
+    chosen_group = _confirmed_group(confirmed)
+    raw = _llm_spec(question, masked_profile(df, profile_columns(df)), design, confirmed)
     spec = None
     if raw and "_error" not in raw:
         try:
@@ -371,8 +410,12 @@ def interpret(question: str, df: pd.DataFrame, design: str | None = None) -> Int
                 problems = validate_spec(df, cand)
             if dated and not cand.change_date:
                 problems = [p for p in problems if p != "Pick the date the change happened."]
+            picked = getattr(cand, "group_col", None)
             if problems:
                 notes.append("The AI misread your data, so columns were guessed: " + " ".join(problems))
+            elif chosen_group and picked and picked != chosen_group:
+                notes.append(f"The AI picked '{picked}', but you said '{chosen_group}' shows who got the campaign, "
+                             f"so '{chosen_group}' is used. You can change it below.")
             else:
                 spec, source = cand, "llm"
         except Exception:
@@ -380,7 +423,8 @@ def interpret(question: str, df: pd.DataFrame, design: str | None = None) -> Int
     elif raw and "_error" in raw:
         notes.append(f"AI unreachable ({raw['_error']}), so columns were guessed.")
     if spec is None:
-        guess = _heuristic_for_design(question, df, design) if design else _pick_heuristic(question, df)
+        guess = (_heuristic_for_design(question, df, design, confirmed) if design
+                 else _pick_heuristic(question, df, confirmed))
         spec = _build_spec(guess, df, design)
         if not os.environ.get("ANTHROPIC_API_KEY"):
             notes.append("No AI key: columns were guessed from names. Please check.")
@@ -405,11 +449,11 @@ def _outcomes(df: pd.DataFrame, exclude: tuple, first: str | None, limit: int, a
 
 
 def _ab_suggestions(df: pd.DataFrame, mode: str, limit: int, gate: bool = True,
-                    analysis: str = "ab_test", assignment: str = "chose") -> list[dict]:
-    group = _group_choice(df)
-    if group is None or (gate and not _has_ab_structure(df, group)):
+                    analysis: str = "ab_test", assignment: str = "chose", confirmed: dict | None = None) -> list[dict]:
+    group = _group_choice(df, confirmed)
+    if group is None or (gate and not _confirmed_group(confirmed) and not _has_ab_structure(df, group)):
         return []
-    base = _ab_heuristic("", df)
+    base = _ab_heuristic("", df, confirmed=confirmed)
     group, control, treatment = base["group_col"], base["control"], base["treatment"]
     if control == treatment:
         return []
@@ -432,15 +476,16 @@ def _ab_suggestions(df: pd.DataFrame, mode: str, limit: int, gate: bool = True,
     return out
 
 
-def _ba_suggestions(df: pd.DataFrame, mode: str, limit: int, with_group: bool = False) -> list[dict]:
-    dcols = date_columns(df)
+def _ba_suggestions(df: pd.DataFrame, mode: str, limit: int, with_group: bool = False,
+                    confirmed: dict | None = None) -> list[dict]:
+    dcols = _confirmed_dates(df, confirmed)
     if not dcols:
         return []
     dcol = dcols[0]
     tail = ", and for whom?" if mode == "research" else "?"
     out = []
     if with_group:
-        group = _group_choice(df)
+        group = _group_choice(df, confirmed)
         if group is None:
             return []
         comparison, treated = _levels_pair(df, group)
@@ -457,7 +502,8 @@ def _ba_suggestions(df: pd.DataFrame, mode: str, limit: int, with_group: bool = 
     return out
 
 
-def suggest_questions(df: pd.DataFrame, mode: str, limit: int = 4, design: str | None = None) -> list[dict]:
+def suggest_questions(df: pd.DataFrame, mode: str, limit: int = 4, design: str | None = None,
+                      confirmed: dict | None = None) -> list[dict]:
     """Ready-made questions built from the file's own columns.
 
     With a design (how people got the change) the list is for that design only. Without one,
@@ -465,15 +511,16 @@ def suggest_questions(df: pd.DataFrame, mode: str, limit: int = 4, design: str |
     """
     try:
         if design == "random":
-            return _ab_suggestions(df, mode, limit, gate=False)
+            return _ab_suggestions(df, mode, limit, gate=False, confirmed=confirmed)
         if design in ("chose", "unsure"):
-            return _ab_suggestions(df, mode, limit, gate=False, analysis="observational", assignment=design)
+            return _ab_suggestions(df, mode, limit, gate=False, analysis="observational", assignment=design,
+                                   confirmed=confirmed)
         if design == "one_date":
-            return _ba_suggestions(df, mode, limit)
+            return _ba_suggestions(df, mode, limit, confirmed=confirmed)
         if design == "one_date_comparison":
-            return _ba_suggestions(df, mode, limit, with_group=True)
-        ab = _ab_suggestions(df, mode, limit)
-        ba = _ba_suggestions(df, mode, 2)
+            return _ba_suggestions(df, mode, limit, with_group=True, confirmed=confirmed)
+        ab = _ab_suggestions(df, mode, limit, confirmed=confirmed)
+        ba = _ba_suggestions(df, mode, 2, confirmed=confirmed)
     except Exception:
         return []
     return ab[: max(limit - len(ba), 2) if ba else limit] + ba

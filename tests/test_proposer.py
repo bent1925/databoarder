@@ -85,7 +85,7 @@ def test_masked_ids_keep_their_format_only():
 def test_typed_questions_no_longer_send_real_ids(monkeypatch):
     seen = {}
 
-    def fake(question, profile, design):
+    def fake(question, profile, design, confirmed=None):
         seen["profile"] = profile
         return None
 

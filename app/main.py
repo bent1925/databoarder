@@ -66,6 +66,13 @@ class ConfirmBody(BaseModel):
     time_column: Optional[str] = None
 
 
+def _confirmed(source: Optional[dict]) -> Optional[dict]:
+    """What the person decided about columns while building the table. These are their choices, not guesses."""
+    if not source:
+        return None
+    return {"group_col": source.get("group_column"), "date_col": source.get("time_column")}
+
+
 def _get(dataset_id: str) -> dict:
     ds = DATASETS.get(dataset_id)
     if not ds:
@@ -101,7 +108,8 @@ def _ingest(raw: bytes, name: str, source: Optional[dict] = None, source_script:
         "name": name,
         "rows": int(df.shape[0]),
         "columns": profile_columns(df),
-        "designs": design_options(df),
+        "designs": design_options(df, _confirmed(source)),
+        "confirmed": _confirmed(source),
         "prep": {"steps": [x.text for x in steps], "notes": notes},
         "preview": df.head(5).astype(object).where(df.head(5).notna(), None).to_dict("records"),
         "source": source,
@@ -216,12 +224,12 @@ def download_snapshot(dataset_id: str):
 def ask(body: AskBody):
     ds = _get(body.dataset_id)
     if body.design:
-        opt = {o["key"]: o for o in design_options(ds["df"])["options"]}.get(body.design)
+        opt = {o["key"]: o for o in design_options(ds["df"], _confirmed(ds.get("source")))["options"]}.get(body.design)
         if not opt:
             raise HTTPException(400, "Unknown choice.")
         if not opt["ok"]:
             raise HTTPException(400, opt["why"])
-    result = interpret(body.question, ds["df"], body.design)
+    result = interpret(body.question, ds["df"], body.design, _confirmed(ds.get("source")))
     return result.model_dump()
 
 
@@ -242,7 +250,7 @@ def run(body: RunBody):
 @app.get("/api/suggestions")
 def suggestions(dataset_id: str, mode: Mode = "quick", design: Optional[str] = None):
     ds = _get(dataset_id)
-    return {"questions": suggest_questions(ds["df"], mode, design=design)}
+    return {"questions": suggest_questions(ds["df"], mode, design=design, confirmed=_confirmed(ds.get("source")))}
 
 
 @app.get("/api/covariates")

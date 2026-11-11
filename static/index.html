@@ -342,6 +342,12 @@ async function showDataset() {
     <tbody>${d.preview.map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   const pr = d.prep || { steps: [], notes: [] };
   if (pr.steps.length || pr.notes.length) $("fileinfo").insertAdjacentHTML("beforeend", `<div class="adj" style="margin:12px 0 0">${pr.steps.length ? `🧹 Tidied for you (also in the script):<ul style="margin:4px 0 0;padding-left:20px;font-weight:700">${pr.steps.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}${pr.notes.map((t) => `<div class="note" style="margin-top:8px">💡 ${esc(t)}</div>`).join("")}</div>`);
+  const cf = d.confirmed;
+  if (cf && (cf.group_col || cf.date_col)) {
+    const said = cf.group_col ? `<b>${esc(cf.group_col)}</b> says who got the campaign, so questions compare those groups.`
+      : `Everyone got the campaign, so questions compare before and after, using <b>${esc(cf.date_col)}</b>.`;
+    $("fileinfo").insertAdjacentHTML("beforeend", `<div class="adj" style="margin:12px 0 0">✅ You confirmed this when you built the table: ${said} To change it, build the table again.</div>`);
+  }
   $("togglePrev").onclick = () => $("prev").classList.toggle("hidden");
   $("swap").onclick = () => location.reload();
   $("s2").classList.remove("hidden"); $("s2b").classList.remove("hidden"); $("s3").classList.remove("hidden");
