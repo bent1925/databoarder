@@ -3,12 +3,13 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-10
+**Last updated:** 2026-11-13
 
 ## Right now
 
-- **Branch:** `data-stage-finish`, pushed to GitHub, **not merged**. All 259 tests pass.
-- **Paused** at the end of the day. Nothing half-finished in the code.
+- **Branch:** `data-stage-finish`, pushed to GitHub, **not merged**, no PR yet. All 259 tests pass.
+- **Clicked through in a browser (2026-11-13).** It works, but combining files is the bottleneck: too many
+  options, too noisy for a nontechnical person.
 
 ## The project in one paragraph
 
@@ -30,11 +31,27 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
 
 ## Next up, in order
 
-1. **Click through the new screens in a browser.** Only the server side is tested.
-2. **Recognize two more messy formats:** IDs Excel turned into `9.941E+14`, and codes like `XX` meaning
-   "missing". The `XX` one can silently count missing values as real data.
-3. **Merge `data-stage-finish`.**
-4. **Step 2:** a ready-to-forward note telling the analyst exactly what's missing from a pull.
+1. **Codex review of `data-stage-finish`.** Open a PR to `main` and fix what the review finds.
+2. **Merge `data-stage-finish`.**
+3. **One-screen combine flow.** Start with a clickable mockup, not code. Replace the step-by-step recipe builder
+   with: upload the files, see the finished table with sanity numbers ("10,000 customers, 50% got the email"),
+   and answer only the 3–4 choices that change the answer (who counts, who got the campaign, what counts as
+   the result and over what window, what to do with people who don't match or appear twice). Each answer
+   is shown as a suggestion until confirmed. Mechanical fixes (trimming, stacking, reading Excel) are applied
+   by fixed code and listed, collapsed, with row counts. Matching IDs across files is done by code, not the AI.
+   Possibly ask the question before the upload so the table is built for it.
+4. **Recognize more messy formats:** IDs Excel turned into `9.941E+14`, codes like `XX` meaning "missing",
+   and `YYYYMMDD` dates. The `XX` one can silently count missing values as real data. These fit the
+   "mechanical fixes" part of the new flow.
+5. **Step 2:** a ready-to-forward note telling the analyst exactly what's missing from a pull.
+
+## Open question: why not just use Claude or ChatGPT?
+
+A chatbot already combines files and answers "did it work?" easily. The pitch is "an answer you can defend":
+no hidden choices, the same answer every time, no causal overclaiming, and a result someone else can check.
+That only matters if users get challenged on their numbers. Check with one or two real users how they answer
+these questions today, and what goes wrong. Harder-to-copy parts: the analyst note, saved queries, warehouse
+connections, and monthly reruns with the same choices.
 
 ## Waiting on you
 
