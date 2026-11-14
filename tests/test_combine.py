@@ -113,7 +113,7 @@ def test_a_window_past_the_end_of_the_data_is_refused():
     answers = confirm_all(suggest(source_id)["answers"])
     answers["window"]["days"] = 30
     shown = preview(source_id, answers).json()
-    assert "end on 2024-03-12, so a 30-day window isn't complete" in shown["blocked"][0]
+    assert "orders ends on 2024-03-12, so a 30-day window isn't complete" in shown["blocked"][0]
     assert confirm(source_id, answers).status_code == 400
 
 
@@ -316,3 +316,63 @@ def test_compiled_recipe_reads_only_the_files_it_uses(tmp_path):
     assert sorted(step.file for step in recipe.steps if step.op == "read_table") == [
         "email_sends.csv", "orders.csv", "people.csv"]
     assert {step.status for step in recipe.steps} == {"proposed"}
+
+
+# ------------------------------------------------------------------------------- Codex review on PR #5
+
+def test_people_on_the_list_with_no_version_stay_out_of_the_comparison_group():
+    sends = SENDS.replace("\n3,A,2024-03-01\n", "\n3,,2024-03-01\n")
+    source_id = small(sends=sends)
+    answers = confirm_all(suggest(source_id)["answers"])
+    shown = preview(source_id, answers).json()
+    assert any("1 people in email_sends have no version" in item["text"] for item in shown["info"])
+    result = confirm(source_id, answers).json()
+    table = main.DATASETS[result["dataset_id"]]["df"].set_index("person_id")
+    assert table.loc[3, "campaign_group"] == "Sent, version unknown" and table.loc[3, "got_campaign"] == 1
+    assert (table["campaign_group"] == "Not sent").sum() == 20
+
+
+def test_a_label_that_is_already_a_version_is_refused():
+    source_id = small()
+    answers = confirm_all(suggest(source_id)["answers"])
+    answers["campaign"]["none_label"] = "A"
+    assert "'A' is already one of the versions" in preview(source_id, answers).json()["blocked"][0]
+
+
+def test_activity_without_dates_is_left_out_and_refused():
+    source_id = small(orders="customer_ref,amount\n3,10.50\n25,7.25\n")
+    got = suggest(source_id)
+    assert got["answers"]["events"] == [] and "orders was left out: it has no dates" in got["notes"][0]
+    answers = got["answers"]
+    answers["events"] = [{"table": "orders", "id_column": "customer_ref", "date_column": None,
+                          "any_into": "any_orders", "totals": {"amount": "total_amount"}}]
+    response = preview(source_id, answers)
+    assert response.status_code == 400 and "'orders' has no date column" in response.json()["detail"]
+
+
+def test_each_activity_file_has_to_cover_the_window():
+    visits = "visitor,visit_date\n" + "".join(f"{i},2024-03-{i:02d}\n" for i in range(1, 31))
+    source_id = upload(csv_file("people.csv", PEOPLE), csv_file("email_sends.csv", SENDS),
+                       csv_file("orders.csv", ORDERS), csv_file("visits.csv", visits))
+    got = suggest(source_id)
+    assert got["options"]["window_days"] == [7, 12] and got["answers"]["window"]["days"] == 12   # orders end on day 12
+    answers = confirm_all(got["answers"])
+    answers["window"]["days"] = 30
+    blocked = preview(source_id, answers).json()["blocked"]
+    assert any(text.startswith("orders ends on 2024-03-12, so a 30-day window") for text in blocked)
+    assert not any(text.startswith("visits ends") for text in blocked)
+
+
+def test_coverage_reads_dates_in_the_confirmed_order():
+    # 03/04/2024 read day first is 3 April, so a 30-day window from 1 March is fully covered.
+    orders = "customer_ref,order_date,amount\n3,02/03/2024,10.50\n25,03/04/2024,7.25\n"
+    source_id = small(orders=orders)
+    answers = confirm_all(suggest(source_id)["answers"])
+    answers["window"]["days"] = 30
+    asked = preview(source_id, answers)
+    assert asked.status_code == 400 and "could be March or April" in asked.json()["detail"]
+    answers["window"]["date_order"] = "day_first"
+    shown = preview(source_id, answers).json()
+    assert shown["blocked"] == [] and shown["error"] is None
+    answers["window"]["date_order"] = "month_first"
+    assert "ends on 2024-03-04" in preview(source_id, answers).json()["blocked"][0]

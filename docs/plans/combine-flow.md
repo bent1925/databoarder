@@ -247,7 +247,13 @@ more automatic fixes in the same list.
 - **Some risks block instead of becoming a choice.** IDs that differ only by letters (`A-123`, `B-123`) and people
   listed twice on the campaign list stop the table, with a note for the analyst. Merging different people isn't
   a choice that should be one click away.
-- **A window longer than the data covers is refused** by the server, not only left out of the options.
+- **A window longer than the data covers is refused** by the server, not only left out of the options. Each
+  activity file is checked on its own, with dates read exactly as the recipe reads them (including day/month
+  order), so a file that ends early can't hide behind one that ends later.
+- **Activity files without dates are left out,** with a note saying why. Their rows can't be limited to the
+  window, so counting them would mix in activity from outside it.
+- **People on the campaign list with no version** go into their own group ("Sent, version unknown"), never into
+  the group that wasn't sent anything.
 - **`run_steps()` can start from tables already read,** and the window step can start every row on one date. Both
   are small additions to `app/recipe_ops.py`, and old recipes run exactly as before.
 - **Speed:** a preview takes about 0.4 s on the 64,000-person Hillstrom pull. The first suggestion takes about

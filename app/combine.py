@@ -17,7 +17,8 @@ from typing import Optional
 import pandas as pd
 
 from .ingest import describe, inspect_files, suggest_read_steps
-from .recipe_ops import RecipeError, _clean_key, run_steps
+from .recipe_ops import RecipeError, _clean_key, _timestamp, run_steps
+from .recipe_ops import _dates as _recipe_dates
 from .schemas import (CampaignAnswer, DataRecipe, EventsTable, MissingAnswer, PeopleAnswer, TableAnswers,
                       WindowAnswer)
 
@@ -28,6 +29,7 @@ LINK_SHARE = 0.5           # a file counts as linked when at least half its IDs 
 WINDOW_DAYS = (7, 14, 30, 60, 90)
 
 GOT_IT = "Got it"
+UNKNOWN_VERSION = "Sent, version unknown"
 _POSITIVE_ID = re.compile(r"cust|user|person|member|client|account|visitor|contact|subscriber|recipient|buyer|"
                           r"shopper|(^|[\s_-])id$|^id([\s_-]|$)|ref", re.I)
 _NEGATIVE_ID = re.compile(r"order|invoice|transaction|txn|sku|product|item|line|session|event|visit_?id|campaign", re.I)
@@ -209,8 +211,9 @@ def _window(tables: dict, campaign: Optional[dict], events: list[EventsTable], q
     starts = pd.Series(dtype="datetime64[ns]")
     if campaign and campaign.get("date_column"):
         starts = _dates(tables[campaign["table"]][campaign["date_column"]]).dropna().dt.normalize()
-    event_dates = pd.concat([_dates(tables[e.table][e.date_column]).dropna() for e in events if e.date_column]
-                            or [pd.Series(dtype="datetime64[ns]")])
+    per_table = [_dates(tables[e.table][e.date_column]).dropna() for e in events]
+    per_table = [dates for dates in per_table if not dates.empty]
+    event_dates = pd.concat(per_table or [pd.Series(dtype="datetime64[ns]")])
     guessed = starts.empty
     if guessed:
         starts = event_dates.dt.normalize().head(0) if event_dates.empty else pd.Series([event_dates.min().normalize()])
@@ -220,7 +223,8 @@ def _window(tables: dict, campaign: Optional[dict], events: list[EventsTable], q
     if event_dates.empty:
         return {"start": start, "days": 1, "options": [], "guessed": guessed, "first": starts.min(), "last": None,
                 "spread": 0}
-    last = event_dates.max().normalize()
+    # Every activity file has to cover the whole window, so the file that ends first sets the limit.
+    last = min(dates.max().normalize() for dates in per_table)
     full = int((last - starts.max()).days) + 1
     options = sorted({days for days in WINDOW_DAYS if days <= full} | ({full} if full >= 1 else set()))
     asked = _days_in(question)
@@ -229,7 +233,8 @@ def _window(tables: dict, campaign: Optional[dict], events: list[EventsTable], q
             "last": last, "spread": int((starts.max() - starts.min()).days)}
 
 
-def _events(tables: dict, found: dict, campaign_table: Optional[str], people_columns: list[str]) -> list[EventsTable]:
+def _events(tables: dict, found: dict, campaign_table: Optional[str], people_columns: list[str],
+            notes: list[str]) -> list[EventsTable]:
     taken = set(people_columns)
     events = []
     for name, id_column in found["links"].items():
@@ -237,7 +242,10 @@ def _events(tables: dict, found: dict, campaign_table: Optional[str], people_col
             continue
         table = tables[name]
         dated = _date_columns(table, id_column)
-        date_column = max(dated, key=lambda column: table[column].notna().sum()) if dated else None
+        if not dated:
+            notes.append(f"{name} was left out: it has no dates, so its rows can't be limited to the campaign window.")
+            continue
+        date_column = max(dated, key=lambda column: table[column].notna().sum())
         totals = {column: _unique_name(f"total_{re.sub(r'[^0-9a-zA-Z]+', '_', column).strip('_').lower()}", taken)
                   for column in table.columns
                   if column not in (id_column, date_column) and _MONEY.search(column) and _is_number_column(table[column])}
@@ -269,7 +277,7 @@ def suggest(paths: list[Path], question: str = "") -> dict:
                     "note": analyst_note(["Could you also send the list of people who got the campaign, with their "
                                           "IDs and the date each was sent it?"])}
         answer = CampaignAnswer(kind="column", versions_column=column)
-    events = _events(tables, found, campaign and campaign["table"], [c for c in people_table.columns])
+    events = _events(tables, found, campaign and campaign["table"], list(people_table.columns), notes)
     window = _window(tables, campaign, events, question)
     if window["start"] is None:
         return {"answers": None, "notes": notes, "options": {},
@@ -316,6 +324,9 @@ def _check_names(answers: TableAnswers, tables: dict) -> None:
         need(answers.people.table, campaign.versions_column)
     for events in answers.events:
         need(events.table, events.id_column)
+        if not events.date_column:
+            raise RecipeError(f"'{events.table}' has no date column, so its activity can't be limited to the window. "
+                              "Leave it out, or ask your analyst for the dates.")
         need(events.table, events.date_column)
         for column in events.totals:
             need(events.table, column)
@@ -385,8 +396,19 @@ def review(answers: TableAnswers, tables: dict) -> dict:
             asks.append(f"Could you also send the people who were held out of the campaign? Same columns as "
                         f"{people.table}, plus their activity over the same dates. Without them I can't compare "
                         "people who got it with people who didn't.")
+        if campaign.versions_column and campaign.versions == "separate":
+            versions = tables[campaign.table][campaign.versions_column]
+            blank = int(versions.isna().sum())
+            if blank:
+                info.append({"kind": "campaign", "text": f"{blank:,} people in {campaign.table} have no version, so "
+                             f"they're shown as '{UNKNOWN_VERSION}', apart from the people who weren't sent anything."})
+            clash = {campaign.none_label, UNKNOWN_VERSION} & set(versions.dropna().astype(str))
+            if clash:
+                blocked.append(f"'{sorted(clash)[0]}' is already one of the versions in '{campaign.versions_column}', so "
+                               "it can't also be the label for another group. Choose a different label.")
         if campaign.date_column:
-            sent = _dates(tables[campaign.table][campaign.date_column]).dropna()
+            sent = _recipe_dates(tables[campaign.table][campaign.date_column], campaign.date_column,
+                                 answers.window.date_order).dropna()
             if not sent.empty and (sent.max() - sent.min()).days > SPREAD_DAYS:
                 info.append({"kind": "window", "text": f"Send dates run from {sent.min():%Y-%m-%d} to "
                              f"{sent.max():%Y-%m-%d}. People who weren't sent anything start on "
@@ -394,16 +416,20 @@ def review(answers: TableAnswers, tables: dict) -> dict:
     elif tables[people.table][campaign.versions_column].dropna().nunique() < 2:
         blocked.append(f"Everyone has the same value in '{campaign.versions_column}', so there's no one to compare with.")
 
-    dated = [_dates(tables[e.table][e.date_column]).dropna() for e in answers.events if e.date_column]
-    last = max((values.max() for values in dated if not values.empty), default=None)
-    if last is not None:
-        latest = pd.Timestamp(answers.window.start_date)
-        if campaign.kind == "list" and campaign.date_column:
-            sent = _dates(tables[campaign.table][campaign.date_column]).dropna()
-            latest = max(latest, sent.max()) if not sent.empty else latest
-        covered = int((last.normalize() - latest.normalize()).days) + 1
+    # Read dates exactly as the recipe will, including the confirmed day/month order, and check each file on its own.
+    order = answers.window.date_order
+    latest = _timestamp(answers.window.start_date, "The campaign date", order).normalize()
+    if campaign.kind == "list" and campaign.date_column:
+        sent = _recipe_dates(tables[campaign.table][campaign.date_column], campaign.date_column, order).dropna()
+        if not sent.empty:
+            latest = max(latest, sent.max().normalize())
+    for events in answers.events:
+        when = _recipe_dates(tables[events.table][events.date_column], events.date_column, order).dropna()
+        if when.empty:
+            continue
+        covered = int((when.max().normalize() - latest).days) + 1
         if answers.window.days > covered:
-            blocked.append(f"The activity files end on {last:%Y-%m-%d}, so a {answers.window.days}-day window isn't "
+            blocked.append(f"{events.table} ends on {when.max():%Y-%m-%d}, so a {answers.window.days}-day window isn't "
                            f"complete for everyone and would undercount. Choose {max(covered, 1)} days or fewer, or ask "
                            "your analyst for later data.")
 
@@ -475,6 +501,9 @@ def compile_recipe(answers: TableAnswers, read_steps: list[dict], tables: dict, 
         if campaign.date_column:
             start_column = _unique_name("campaign_start", taken)
             bring[campaign.date_column] = start_column
+        if separate:
+            # Someone on the list with no version still got the campaign, so they must not join the people not sent it.
+            add(op="fill_missing", table=campaign.table, column=campaign.versions_column, value=UNKNOWN_VERSION)
         if bring:
             add(op="match", left=people.table, right=campaign.table, left_key=key, right_key=key, bring=bring)
         if separate:
@@ -491,23 +520,11 @@ def compile_recipe(answers: TableAnswers, read_steps: list[dict], tables: dict, 
         if answers.returns and answers.returns.action == "leave_out":
             for column in events.totals:
                 add(op="filter", table=events.table, column=column, test="at_least", value="0", compare_as="number")
-        if events.date_column:
-            measures = [{"how": "any_event", "into": events.any_into}]
-            measures += [{"how": "sum", "column": column, "into": into} for column, into in events.totals.items()]
-            add(op="count_within_window", table=people.table, key=key, start_column=start_column,
-                default_start=window.start_date, events=events.table, event_key=key, event_date=events.date_column,
-                days=window.days, measures=measures, no_events_value="0", date_order=window.date_order)
-        else:
-            add(op="flag_membership", table=people.table, key=key, other=events.table, other_key=key,
-                into=events.any_into, yes="1", no="0")
-            if events.totals:
-                per_person = _unique_name(f"{events.table}_per_person", set(used) | taken)
-                add(op="roll_up", table=events.table, by=key, into=per_person,
-                    measures=[{"how": "sum", "column": column, "into": into} for column, into in events.totals.items()])
-                add(op="match", left=people.table, right=per_person, left_key=key, right_key=key,
-                    bring={into: into for into in events.totals.values()})
-                for into in events.totals.values():
-                    add(op="fill_missing", table=people.table, column=into, value="0")
+        measures = [{"how": "any_event", "into": events.any_into}]
+        measures += [{"how": "sum", "column": column, "into": into} for column, into in events.totals.items()]
+        add(op="count_within_window", table=people.table, key=key, start_column=start_column,
+            default_start=window.start_date, events=events.table, event_key=key, event_date=events.date_column,
+            days=window.days, measures=measures, no_events_value="0", date_order=window.date_order)
         keep += [events.any_into] + list(events.totals.values())
     if start_column:
         add(op="choose_columns", table=people.table, columns={column: column for column in keep})
