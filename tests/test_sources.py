@@ -488,3 +488,32 @@ def test_ai_cannot_compare_groups_when_everyone_got_it(monkeypatch):
     assert interp["spec"]["analysis_type"] == "before_after"
     assert interp["spec"]["date_col"] == "bought_on"
     assert any("you said everyone got the campaign" in note for note in interp["notes"])
+
+
+GROUP_AND_DATE = "id,got_email,bought_on,spend\n" + "".join(
+    f"{i},{'yes' if i % 2 else 'no'},2024-03-{1 + i % 20:02d},{(i * 7) % 50}\n" for i in range(1, 81))
+BEFORE_AFTER = {"analysis_type": "before_after", "date_col": "bought_on", "outcome_col": "spend", "change_date": ""}
+
+
+def test_before_after_question_that_skips_the_confirmed_group_says_so(monkeypatch):
+    result = _built(group="got_email", content=GROUP_AND_DATE)
+    interp = _ask_with_fake_ai(monkeypatch, result, BEFORE_AFTER, None)
+    assert interp["spec"]["analysis_type"] == "before_after"       # allowed: it's a fair question
+    assert any("doesn't use 'got_email'" in note for note in interp["notes"])
+
+
+def test_no_skipped_group_note_when_the_person_picked_before_after(monkeypatch):
+    result = _built(group="got_email", content=GROUP_AND_DATE)
+    interp = _ask_with_fake_ai(monkeypatch, result, BEFORE_AFTER, "one_date")
+    assert interp["spec"]["analysis_type"] == "before_after"
+    assert not any("doesn't use" in note for note in interp["notes"])
+
+
+def test_no_skipped_group_note_when_the_group_is_used(monkeypatch):
+    result = _built(group="got_email", content=GROUP_AND_DATE)
+    interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "ab_test", "group_col": "got_email",
+                                                     "control": "0", "treatment": "1",
+                                                     "outcome_col": "spend"}, None)
+    assert interp["source"] == "llm"
+    assert not any("doesn't use" in note for note in interp["notes"])
+

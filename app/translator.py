@@ -452,6 +452,13 @@ def interpret(question: str, df: pd.DataFrame, design: str | None = None,
         spec = _build_spec(guess, df, design)
         if not os.environ.get("ANTHROPIC_API_KEY"):
             notes.append("No AI key: columns were guessed from names. Please check.")
+    group = _confirmed_group(confirmed)
+    if group and not design and not getattr(spec, "group_col", None):
+        # A fair question ("did spend go up over time?"), so allowed, but it sets aside a confirmed choice.
+        notes.append(f"This compares everyone before and after a date, so it doesn't use '{group}', which you said "
+                     "shows who got the campaign. It can't tell whether the campaign made the difference. To compare "
+                     "people who got it with people who didn't, answer Step 3 (\"How did people end up with the "
+                     "change?\").")
     if spec.analysis_type in ("before_after", "diff_in_diff") and not spec.change_date:
         notes.append("Pick the date the change happened.")
     return Interpretation(spec=spec, readback=readback(df, spec), source=source, notes=notes)
