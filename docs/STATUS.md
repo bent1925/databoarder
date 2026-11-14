@@ -69,12 +69,10 @@ connections, and monthly reruns with the same choices.
   per company, or running inside the customer's environment. Also shapes step 4.
 - **A real analyst pull,** to check size limits and whether the AI suggestions help.
 
-## Open, decide before phase 2
-
-- **The old step-by-step builder:** hide it behind a "Build it step by step instead" link (the plan's default)
-  or remove it. Deferred 2026-11-13.
-
 ## Decided
+
+- **The old step-by-step builder** stays, hidden behind a "Build it step by step instead" link, for pulls
+  the four choices can't describe. (Decided 2026-11-14.)
 
 - **People on more than one row:** a table can't be confirmed until it has one row per person. Clustered error
   estimates are on hold until a real pull needs them. (Recommended 2026-11-10; confirm if you disagree.)

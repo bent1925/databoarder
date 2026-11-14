@@ -173,7 +173,7 @@ separate, later problem.
 - **Replaced:** the AI step proposer (`app/proposer.py`). It becomes an answer proposer, and
   `evals/recipe_cases.py` becomes `evals/answer_cases.py`.
 
-**Open question:** remove the builder entirely once a real pull shows whether anyone needs it. Keeping it
+**Decided (2026-11-14):** keep the builder, hidden behind the link. Revisit once a real pull shows whether anyone needs it. Keeping it
 costs maintenance, and it's the noisy screen this plan replaces.
 
 ## Statistical points to get right
