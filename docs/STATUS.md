@@ -35,8 +35,8 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
 
 1. **One-screen combine flow.** Mockup approved 2026-11-13: [mockups/combine-flow.html](mockups/combine-flow.html)
    (published privately at https://claude.ai/artifact/81LqwpTmSo4mA9E9W6YLAu). Building it, following [plans/combine-flow.md](plans/combine-flow.md) (three PRs: server, screen, AI).
-   **Phase 1 (server) done on `combine-flow-server`, not pushed yet:** suggested answers, previews, blocking checks,
-   the analyst note, and building from confirmed answers. 285 tests pass. Next: Codex review, then phase 2 (screen).
+   **Phase 1 (server) done on `combine-flow-server`, in PR #5 (waiting on Codex review):** suggested answers, previews, blocking checks,
+   the analyst note, and building from confirmed answers. 285 tests pass. Next: fix review findings, merge, then phase 2 (screen).
    Decided 2026-11-13: keep "Confirm all suggestions" (the choices stay visible above it). Matching IDs by
    digits and adding up orders stay automatic, but become an extra choice when matching looks risky (people
    would merge, or many IDs don't match). The optional question asked before upload steers the suggestions and
