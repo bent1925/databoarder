@@ -69,6 +69,11 @@ connections, and monthly reruns with the same choices.
   per company, or running inside the customer's environment. Also shapes step 4.
 - **A real analyst pull,** to check size limits and whether the AI suggestions help.
 
+## Open, decide before phase 2
+
+- **The old step-by-step builder:** hide it behind a "Build it step by step instead" link (the plan's default)
+  or remove it. Deferred 2026-11-13.
+
 ## Decided
 
 - **People on more than one row:** a table can't be confirmed until it has one row per person. Clustered error
