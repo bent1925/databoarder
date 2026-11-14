@@ -379,8 +379,14 @@ EMAILED = "id,cohort,got_email,signup_date,spend\n" + "".join(
     for i in range(1, 81))
 
 
-def _built(group=None, time_column=None):
-    got = add(csv_file("people.csv", EMAILED))
+# Two date columns: the person says purchases happened on 'bought_on', not 'signup_date'.
+TWO_DATES = "id,cohort,signup_date,bought_on,spend\n" + "".join(
+    f"{i},{'spring' if i % 3 else 'fall'},2024-01-{1 + i % 20:02d},2024-03-{1 + i % 20:02d},{(i * 7) % 50}\n"
+    for i in range(1, 81))
+
+
+def _built(group=None, time_column=None, content=EMAILED):
+    got = add(csv_file("people.csv", content))
     response = confirm(got["source_id"], confirmed(got["steps"]), unit="id", group=group, time_column=time_column)
     assert response.status_code == 200, response.text
     return response.json()
@@ -445,3 +451,40 @@ def test_everyone_got_it_rules_out_group_comparisons_and_uses_the_chosen_date():
     assert refused.status_code == 400
     questions = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design=one_date").json()
     assert {q["spec"]["date_col"] for q in questions["questions"]} == {"signup_date"}
+
+
+def _ask_with_fake_ai(monkeypatch, result, answer, design):
+    from app import translator
+    monkeypatch.setattr(translator, "_llm_spec", lambda question, profile, design, confirmed=None: answer)
+    response = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "Did spend go up?",
+                                              "design": design})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_ai_cannot_quietly_swap_the_confirmed_date(monkeypatch):
+    result = _built(time_column="bought_on", content=TWO_DATES)
+    for design in ("one_date", None):
+        interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "before_after", "date_col": "signup_date",
+                                                         "outcome_col": "spend", "change_date": ""}, design)
+        assert interp["spec"]["date_col"] == "bought_on", design
+        assert any("you said 'bought_on' is the date column" in note for note in interp["notes"]), design
+
+
+def test_ai_answer_using_the_confirmed_date_is_kept(monkeypatch):
+    result = _built(time_column="bought_on", content=TWO_DATES)
+    interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "before_after", "date_col": "bought_on",
+                                                     "outcome_col": "spend", "change_date": ""}, "one_date")
+    assert interp["source"] == "llm" and interp["spec"]["date_col"] == "bought_on"
+    assert not any("you said" in note for note in interp["notes"])
+
+
+def test_ai_cannot_compare_groups_when_everyone_got_it(monkeypatch):
+    # With no design picked yet, the AI chooses the kind of analysis, so it could split people into groups.
+    result = _built(time_column="bought_on", content=TWO_DATES)
+    interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "ab_test", "group_col": "cohort",
+                                                     "control": "fall", "treatment": "spring",
+                                                     "outcome_col": "spend"}, None)
+    assert interp["spec"]["analysis_type"] == "before_after"
+    assert interp["spec"]["date_col"] == "bought_on"
+    assert any("you said everyone got the campaign" in note for note in interp["notes"])

@@ -204,6 +204,32 @@ def _confirmed_group(confirmed: dict | None) -> str | None:
     return (confirmed or {}).get("group_col") or None
 
 
+def _confirmed_date(confirmed: dict | None) -> str | None:
+    return (confirmed or {}).get("date_col") or None
+
+
+def _everyone_got_it(confirmed: dict | None) -> bool:
+    """While building the table, the person said everyone got the campaign (they chose a date, not a group)."""
+    return bool(_confirmed_date(confirmed)) and not _confirmed_group(confirmed)
+
+
+def _overrides_confirmed(spec, confirmed: dict | None) -> str | None:
+    """If a spec uses a different column from one the person confirmed while building the table, explain why the
+    confirmed one is used instead. None when the spec agrees with everything they confirmed."""
+    group, date = _confirmed_group(confirmed), _confirmed_date(confirmed)
+    picked_group, picked_date = getattr(spec, "group_col", None), getattr(spec, "date_col", None)
+    if group and picked_group and picked_group != group:
+        return (f"The AI picked '{picked_group}', but you said '{group}' shows who got the campaign, "
+                f"so '{group}' is used. You can change it below.")
+    if _everyone_got_it(confirmed) and picked_group:
+        return (f"The AI compared groups in '{picked_group}', but you said everyone got the campaign, "
+                "so before and after are compared instead. You can change it below.")
+    if date and picked_date and picked_date != date:
+        return (f"The AI picked '{picked_date}' as the date, but you said '{date}' is the date column, "
+                f"so '{date}' is used. You can change it below.")
+    return None
+
+
 def _confirmed_dates(df: pd.DataFrame, confirmed: dict | None) -> list[str]:
     """Date columns, with the one the person chose while building the table first."""
     dcols = date_columns(df)
@@ -324,7 +350,7 @@ def _pick_heuristic(question: str, df: pd.DataFrame, confirmed: dict | None = No
     if dcols:
         dates = parse_dates(df[dcols[0]]).dropna()
         typed_date = bool(len(dates)) and bool(find_date_in_text(question, dates))
-        if bool(TIME_WORDS.search(question)) or typed_date or not ab_ok:
+        if bool(TIME_WORDS.search(question)) or typed_date or not ab_ok or _everyone_got_it(confirmed):
             return _ba_heuristic(question, df, dcols[0], confirmed=confirmed)
     return _ab_heuristic(question, df, confirmed=confirmed)
 
@@ -339,7 +365,7 @@ def design_options(df: pd.DataFrame, confirmed: dict | None = None) -> dict:
 
     `confirmed` holds what the person decided while building the table: the column saying who got the campaign
     (group_col), or, when everyone got it, the date column (date_col). Those decisions narrow the options."""
-    everyone = bool((confirmed or {}).get("date_col")) and not _confirmed_group(confirmed)
+    everyone = _everyone_got_it(confirmed)
     group = None if everyone else _group_choice(df, confirmed)
     dcols = _confirmed_dates(df, confirmed)
     need_group, need_date = "Needs a column that splits people into groups.", "Needs a date column."
@@ -396,7 +422,6 @@ def interpret(question: str, df: pd.DataFrame, design: str | None = None,
               confirmed: dict | None = None) -> Interpretation:
     notes: list[str] = []
     source = "heuristic"
-    chosen_group = _confirmed_group(confirmed)
     raw = _llm_spec(question, masked_profile(df, profile_columns(df)), design, confirmed)
     spec = None
     if raw and "_error" not in raw:
@@ -410,12 +435,11 @@ def interpret(question: str, df: pd.DataFrame, design: str | None = None,
                 problems = validate_spec(df, cand)
             if dated and not cand.change_date:
                 problems = [p for p in problems if p != "Pick the date the change happened."]
-            picked = getattr(cand, "group_col", None)
+            override = _overrides_confirmed(cand, confirmed)
             if problems:
                 notes.append("The AI misread your data, so columns were guessed: " + " ".join(problems))
-            elif chosen_group and picked and picked != chosen_group:
-                notes.append(f"The AI picked '{picked}', but you said '{chosen_group}' shows who got the campaign, "
-                             f"so '{chosen_group}' is used. You can change it below.")
+            elif override:
+                notes.append(override)
             else:
                 spec, source = cand, "llm"
         except Exception:
