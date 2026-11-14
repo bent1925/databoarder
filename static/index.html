@@ -177,6 +177,40 @@
   .mrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .mrow select, .mrow input { width: auto; flex: 1 1 130px; }
   .mhead { font-weight: 900; margin: 18px 0 6px; }
+
+  /* the one-screen combine flow */
+  .ctiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 10px; }
+  @media (max-width: 520px) { .ctiles { grid-template-columns: 1fr 1fr; } .ctile .v { font-size: 20px; } }
+  .ctile { border: 2px solid var(--ink); border-radius: 16px; padding: 10px 14px; background: #fff; min-width: 0; }
+  .ctile .k { font-size: 13px; font-weight: 800; color: var(--muted); overflow-wrap: anywhere; }
+  .ctile .v { font-size: 24px; font-weight: 900; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .ctile .s { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .choice { border: 2.5px dashed var(--ink); border-radius: 18px; padding: 14px 16px; margin-bottom: 12px; background: var(--yellow-soft); }
+  .choice.done { border-style: solid; background: var(--green-soft); }
+  .choice.ask { border-style: solid; background: var(--orange-soft); }
+  .choice .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .choice .q { font-weight: 900; margin: 0; }
+  .pill { font-size: 12.5px; font-weight: 900; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; background: #fff; white-space: nowrap; }
+  .choice .answer { font-weight: 800; margin: 6px 0 2px; }
+  .choice .why { font-size: 14px; font-weight: 700; color: var(--muted); margin: 0; }
+  .choice .row { margin-top: 10px; }
+  .copts { display: grid; gap: 8px; margin-top: 10px; }
+  .copt { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: start; background: #fff; border: 2px solid var(--line);
+    border-radius: 14px; padding: 10px 12px; cursor: pointer; font-weight: 800; }
+  .copt:hover { border-color: var(--purple); } .copt.on { border-color: var(--ink); }
+  .copt input { margin-top: 4px; accent-color: var(--purple); width: 17px; height: 17px; }
+  .copt small { display: block; grid-column: 2; font-size: 13.5px; font-weight: 700; color: var(--muted); }
+  .btn.small { padding: 6px 14px; font-size: 14px; border-radius: 12px; box-shadow: 0 3px 0 var(--ink); }
+  .letter { white-space: pre-wrap; background: #fff; border: 2px solid var(--ink); border-radius: 14px; padding: 12px 14px;
+    font-weight: 700; font-size: 14.5px; margin: 10px 0; }
+  details.cfixes { margin-top: 18px; border-top: 2px solid var(--line); padding-top: 12px; }
+  details.cfixes summary { cursor: pointer; font-weight: 900; }
+  details.cfixes summary small { font-weight: 700; color: var(--muted); }
+  .cfix { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; font-weight: 700; border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .cfix > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .cfix .n { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cfix small { grid-column: 1 / -1; color: var(--muted); font-weight: 700; }
+  @media (max-width: 520px) { .cfix { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -206,8 +240,24 @@
       <li>Avoid uploading sensitive data to a shared demo.</li></ul></details>
   </section>
 
-  <section class="card hidden" id="m1">
+  <section class="card hidden" id="c1">
     <p class="title"><span class="ic o">🧩</span> Put your files together</p>
+    <p class="how">Add everything your analyst sent, as <b>CSV or Excel</b>, all at once. We'll put them into one table and ask only the <b>few choices that change the answer</b>. Nothing is used until you've confirmed them.</p>
+    <label class="f" for="cq">What do you want to find out? <span class="muted">(optional, helps us suggest the right answers)</span></label>
+    <textarea id="cq" placeholder="For example: did the March email get more people to buy within two weeks?" style="min-height:60px"></textarea>
+    <div id="cdrop" class="drop" style="margin-top:14px">
+      <div class="big">🗂️</div>
+      <div>Drop your files here, or <button class="linkish" id="cpick">browse</button></div>
+      <input type="file" id="cfile" accept=".csv,.xlsx" multiple class="hidden">
+    </div>
+    <div id="cfound"></div>
+    <div id="cbody" class="hidden"></div>
+    <div id="cerr" class="err"></div>
+    <div class="row"><span class="muted">Files don't fit these choices?</span> <button class="linkish" id="cbuilder">🔧 Build it step by step instead</button></div>
+  </section>
+
+  <section class="card hidden" id="m1">
+    <p class="title"><span class="ic o">🧩</span> Put your files together, step by step</p>
     <p class="how">Add everything your analyst sent, as <b>CSV or Excel</b>. Each step below is shown in plain words, with how many rows it keeps or loses. <b>Nothing is used until you've confirmed every step.</b></p>
     <div id="mdrop" class="drop">
       <div class="big">🗂️</div>
@@ -348,6 +398,10 @@ async function showDataset() {
       : `Everyone got the campaign, so questions compare before and after, using <b>${esc(cf.date_col)}</b>.`;
     $("fileinfo").insertAdjacentHTML("beforeend", `<div class="adj" style="margin:12px 0 0">✅ You confirmed this when you built the table: ${said} To change it, build the table again.</div>`);
   }
+  const decided = d.source && d.source.decisions;
+  if (decided && decided.length) $("fileinfo").insertAdjacentHTML("beforeend", `<details class="privacy" id="decided"><summary>🧾 What you decided when you built the table</summary><ul>${decided.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>`);
+  const asked = d.source && d.source.question;
+  if (asked && !$("qother").value) $("qother").value = asked;
   $("togglePrev").onclick = () => $("prev").classList.toggle("hidden");
   $("swap").onclick = () => location.reload();
   $("s2").classList.remove("hidden"); $("s2b").classList.remove("hidden"); $("s3").classList.remove("hidden");
@@ -425,7 +479,7 @@ const colsOf = (name) => M.tables[name] || [];
 const option = (v, label, cur) => `<option value="${esc(v)}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${esc(label ?? v)}</option>`;
 const selectHtml = (attr, options, cur) => `<select ${attr}>${option("", "Choose…", cur)}${options.map((o) => (Array.isArray(o) ? option(o[0], o[1], cur) : option(o, o, cur))).join("")}</select>`;
 
-$("openmerge").onclick = () => { $("m1").classList.remove("hidden"); $("m1").scrollIntoView({ behavior: "smooth", block: "start" }); };
+$("openmerge").onclick = () => { $("c1").classList.remove("hidden"); $("c1").scrollIntoView({ behavior: "smooth", block: "start" }); };
 $("mpick").onclick = () => $("mfile").click();
 $("mdrop").onclick = (e) => { if (e.target.id !== "mpick") $("mfile").click(); };
 $("mfile").onchange = (e) => e.target.files.length && addFiles([...e.target.files]);
@@ -622,6 +676,218 @@ async function finishMerge() {
       group_column: M.compare === "group" ? M.groupCol : null, time_column: M.compare === "time" ? M.timeCol : null });
   } catch (e) { busy(btn, false); $("merr").textContent = "😕 " + e.message; return; }
   $("m1").classList.add("hidden");
+  await showDataset();
+  $("s1").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ---------- 1a put files together: a few choices ---------- */
+const C = { id: null, files: [], rows: {}, answers: null, options: {}, notes: [], view: null, error: "", open: null,
+            run: 0, peek: false };
+const ASK = { missing: "ask", match: "ask" };
+const pct = (n) => n.toLocaleString();
+const addDays = (iso, days) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+
+$("cpick").onclick = () => $("cfile").click();
+$("cdrop").onclick = (e) => { if (e.target.id !== "cpick") $("cfile").click(); };
+$("cfile").onchange = (e) => e.target.files.length && combineFiles([...e.target.files]);
+["dragover", "dragenter"].forEach((t) => $("cdrop").addEventListener(t, (e) => { e.preventDefault(); $("cdrop").classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => $("cdrop").addEventListener(t, (e) => { e.preventDefault(); $("cdrop").classList.remove("over"); }));
+$("cdrop").addEventListener("drop", (e) => e.dataTransfer.files.length && combineFiles([...e.dataTransfer.files]));
+$("cbuilder").onclick = () => {
+  $("c1").classList.add("hidden"); $("m1").classList.remove("hidden");
+  if (C.files.length) addFiles(C.files);
+  $("m1").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+async function combineFiles(files) {
+  $("cerr").textContent = ""; C.files = files;
+  $("cfound").innerHTML = `<p class="muted"><span class="spin"></span>Reading your files and putting them together. Large Excel files can take a minute.</p>`;
+  const fd = new FormData(); files.forEach((f) => fd.append("files", f));
+  let got, sug;
+  try {
+    got = await api("/api/sources", { method: "POST", body: fd });
+    C.id = got.source_id;
+    got.steps.forEach((step, i) => { C.rows[step.into] = got.tables[i].rows; });
+    sug = await post(`/api/sources/${C.id}/answers/suggest`, { question: $("cq").value });
+  } catch (e) { $("cfound").innerHTML = ""; $("cerr").textContent = "😕 " + e.message; return; }
+  $("cdrop").classList.add("hidden");
+  $("cfound").innerHTML = `<div class="mhead">Your files</div>` + got.tables.map((t) => `<span class="chip">📄 ${esc(t.file)}${t.sheet ? " · " + esc(t.sheet) : ""} · ${t.rows.toLocaleString()} rows</span>`).join("");
+  C.notes = sug.notes || []; C.options = sug.options || {};
+  if (!sug.answers) {
+    $("cbody").classList.remove("hidden");
+    $("cbody").innerHTML = blockedHtml(sug.blocked, sug.note);
+    bindCopy();
+    return;
+  }
+  C.answers = sug.answers;
+  await combinePreview();
+}
+
+async function combinePreview() {
+  const run = ++C.run;
+  try {
+    const view = await post(`/api/sources/${C.id}/answers/preview`, { answers: C.answers });
+    if (run !== C.run) return;
+    C.view = view; C.error = "";
+    let added = false;
+    if (view.needs.includes("match") && !C.answers.match) { C.answers.match = { status: "suggested", by: "code", action: "leave_out" }; added = true; }
+    if (view.needs.includes("returns") && !C.answers.returns) { C.answers.returns = { status: "suggested", by: "code", action: "count" }; added = true; }
+    if (added) return combinePreview();
+  } catch (e) {
+    if (run !== C.run) return;
+    C.view = null; C.error = e.message;
+  }
+  renderCombine();
+}
+
+function choiceList() {
+  const a = C.answers, v = C.view, list = [];
+  const peopleOpts = (C.options.people || []).map((o) => ({ label: `Everyone in ${o.table}: ${pct(C.rows[o.table] || 0)} rows`,
+    small: o.table === (C.options.people[0] || {}).table ? "It's the list that holds the people in your other files." : "Only people in this file are kept.",
+    on: () => a.people.table === o.table && a.people.id_column === o.id_column,
+    pick: () => { a.people.table = o.table; a.people.id_column = o.id_column; } }));
+  list.push({ key: "people", q: "Who belongs in the table?", opts: peopleOpts,
+    answer: `Everyone in ${a.people.table}, one row each`, why: `Their ID is in '${a.people.id_column}'. Everyone else in your files is matched to them.` });
+
+  const c = a.campaign, versions = (C.options.versions || []).join(", ");
+  const campaignOpts = c.kind === "list" && c.versions_column ? [
+    { label: `Keep the versions separate (${versions})`, small: "You can compare each version with the people who weren't sent anything.",
+      on: () => c.versions === "separate", pick: () => { c.versions = "separate"; } },
+    { label: "Count every version as one group", small: "One group that got it, one that didn't. You can't tell the versions apart later.",
+      on: () => c.versions === "any", pick: () => { c.versions = "any"; } }] : [];
+  list.push({ key: "campaign", q: "Who got the campaign?", opts: campaignOpts,
+    answer: c.kind === "list" ? `People in ${c.table} got it${c.versions_column ? (c.versions === "separate" ? ", with each version kept separate" : ", with every version counted as one") : ""}`
+      : `'${c.versions_column}' shows who got it`,
+    why: c.kind === "list" ? `Everyone else is "${c.none_label}". They're the comparison group.` : `Each value in '${c.versions_column}' becomes a group to compare.` });
+
+  const w = a.window, own = c.kind === "list" && c.date_column;
+  const windowOpts = (C.options.window_days || []).map((d) => ({ label: `${d} days: ${w.start_date} to ${addDays(w.start_date, d - 1)}`,
+    small: d === Math.max(...C.options.window_days) ? "All the dates your files cover." : "Activity after this is left out.",
+    on: () => w.days === d, pick: () => { w.days = d; } }));
+  list.push({ key: "window", q: "Which activity counts?", opts: windowOpts,
+    answer: `${w.days} days from ${own ? "each person's send date" : w.start_date}`,
+    why: own ? `People who weren't sent anything start on ${w.start_date}, so both groups are measured over the same days.`
+      : "Everyone is measured over the same days.", dates: true });
+
+  list.push({ key: "missing", q: "What about people missing from the activity files?", opts: [
+    { label: "They had no activity: count them as 0", small: "Activity files usually list only people who did something.",
+      on: () => a.missing.means === "none", pick: () => { a.missing.means = "none"; } },
+    { label: "I'm not sure. Ask my analyst first", small: "The table waits until you know. We'll add the question to a note you can send.",
+      on: () => a.missing.means === "ask", pick: () => { a.missing.means = "ask"; } }],
+    answer: a.missing.means === "none" ? "They had no activity: counted as 0" : "Asking your analyst first", why: "" });
+
+  const risks = (kind) => (v ? v.risks.filter((r) => r.kind === kind).map((r) => r.text).join(" ") : "");
+  if (a.match) list.push({ key: "match", q: "Some rows don't match anyone. What should happen to them?", opts: [
+    { label: "Leave those rows out", small: "Their activity won't count for anyone.", on: () => a.match.action === "leave_out", pick: () => { a.match.action = "leave_out"; } },
+    { label: "I'm not sure. Ask my analyst first", small: "They may be people missing from your list, or IDs written differently.",
+      on: () => a.match.action === "ask", pick: () => { a.match.action = "ask"; } }],
+    answer: a.match.action === "leave_out" ? "Leave those rows out" : "Asking your analyst first", why: risks("match") });
+  if (a.returns) list.push({ key: "returns", q: "Some amounts are negative, such as refunds. Should they count?", opts: [
+    { label: "Count them: refunds reduce the total", small: "Totals show what people kept.", on: () => a.returns.action === "count", pick: () => { a.returns.action = "count"; } },
+    { label: "Leave negative amounts out", small: "Totals show what people paid, before refunds.", on: () => a.returns.action === "leave_out", pick: () => { a.returns.action = "leave_out"; } }],
+    answer: a.returns.action === "count" ? "Count them: refunds reduce the total" : "Leave negative amounts out", why: risks("returns") });
+  return list;
+}
+
+function choiceHtml(ch, i) {
+  const ans = C.answers[ch.key], done = ans.status === "confirmed";
+  const asking = ASK[ch.key] && (ans.means === "ask" || ans.action === "ask");
+  const cls = asking ? "ask" : done ? "done" : "";
+  const pill = asking ? "Asking your analyst" : done ? (ans.by === "person" ? "✓ Your choice" : "✓ Confirmed by you") : "Suggested";
+  let body = `<p class="answer">${esc(ch.answer)}</p>${ch.why ? `<p class="why">${esc(ch.why)}</p>` : ""}`;
+  if (ch.dates && (C.answers.window.date_order || /March or April/.test(C.error))) {
+    body += `<div class="mfield" style="margin-top:10px"><label class="f" for="c-order">Dates like 03/04/2024 mean</label>${selectHtml('id="c-order"', DATE_ORDER, C.answers.window.date_order || "")}</div>`;
+  }
+  if (C.open === ch.key) {
+    body += `<div class="copts" role="radiogroup" aria-label="${esc(ch.q)}">${ch.opts.map((o, j) => `
+      <label class="copt ${o.on() ? "on" : ""}"><input type="radio" name="c-${ch.key}" id="c-${ch.key}-${j}" value="${j}" ${o.on() ? "checked" : ""} data-cpick="${ch.key}">
+      <span>${esc(o.label)}</span><small>${esc(o.small)}</small></label>`).join("")}</div>
+      <div class="row"><button class="btn small" data-cdone="${ch.key}">Use this answer</button></div>`;
+  } else {
+    body += `<div class="row">${done || asking ? "" : `<button class="btn small" data-cconfirm="${ch.key}">Confirm</button>`}
+      ${ch.opts.length > 1 ? `<button class="linkish" data-cchange="${ch.key}">Change</button>` : ""}</div>`;
+  }
+  return `<div class="choice ${cls}" data-choice="${ch.key}"><div class="top"><p class="q">${i + 1}. ${esc(ch.q)}</p><span class="pill">${pill}</span></div>${body}</div>`;
+}
+
+function blockedHtml(blocked, note) {
+  return (blocked || []).map((t) => `<div class="banner warn" data-blocked>⛔ ${esc(t)}</div>`).join("") + (note ? `
+    <div class="box caveats" id="cnote"><b>✉️ A note for your analyst</b>Copy it and send it however you usually would.
+      <div class="letter" id="cletter">${esc(note)}</div>
+      <div class="row" style="margin-top:0"><button class="btn small soft" id="ccopy">📋 Copy note</button><span id="ccopied" class="muted" aria-live="polite"></span></div></div>` : "");
+}
+
+function bindCopy() {
+  if (!$("ccopy")) return;
+  $("ccopy").onclick = () => {
+    const text = $("cletter").textContent;
+    const select = () => { const r = document.createRange(); r.selectNodeContents($("cletter")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); $("ccopied").textContent = "Selected. Press Ctrl+C or ⌘C to copy."; };
+    try { navigator.clipboard.writeText(text).then(() => { $("ccopied").textContent = "Copied"; }, select); } catch (e) { select(); }
+  };
+}
+
+function renderCombine() {
+  const v = C.view, list = choiceList();
+  const needs = v ? v.needs : ["people", "campaign", "window", "missing"];
+  const done = needs.filter((k) => C.answers[k] && C.answers[k].status === "confirmed").length;
+  const waiting = needs.filter((k) => C.answers[k] && C.answers[k].status !== "confirmed").length;
+  let h = "";
+  if (v) {
+    h += `<div class="mhead">Here's your table</div><p class="how" style="margin:0 0 6px">Check these numbers look right to you.</p>
+      <div class="ctiles" id="ctiles">${v.numbers.map((n) => `<div class="ctile"><div class="k">${esc(n.label)}</div><div class="v">${esc(n.value)}</div><div class="s">${esc(n.sub)}</div></div>`).join("")}</div>
+      <button class="linkish" id="cpeek">${C.peek ? "Hide the rows" : "👀 Peek at 5 rows"}</button>
+      ${C.peek ? `<div class="scroll" style="margin-top:8px"><table class="preview"><thead><tr>${v.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+        <tbody>${v.sample.map((r) => `<tr>${v.columns.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}`;
+  }
+  if (C.error) h += `<div class="banner warn" id="cproblem">⛔ ${esc(C.error)}</div>`;
+  h += C.notes.map((t) => `<div class="note">💡 ${esc(t)}</div>`).join("");
+  h += `<div class="mhead">Your choices <span class="muted" style="font-weight:800">· ${done} of ${needs.length} confirmed</span></div>
+    <p class="how" style="margin:0 0 10px">These change the answer, so they're yours to make. We've suggested an answer for each.</p>
+    <div id="cchoices">${list.map(choiceHtml).join("")}</div>`;
+  if (v) {
+    h += (v.info || []).map((it) => `<div class="note">💡 ${esc(it.text)}</div>`).join("");
+    h += blockedHtml(v.blocked, v.note);
+  }
+  const why = !v ? "Fix the problem above first" : v.blocked.length ? "Can't be used yet: see above" : waiting ? `${waiting} still to confirm` : "";
+  h += `<div class="row">${waiting ? `<button class="btn soft" id="call">✅ Confirm ${waiting === 1 ? "the last suggestion" : `all ${waiting} suggestions`}</button>` : ""}
+    <button class="btn" id="cuse" ${v && v.ready ? "" : "disabled"}>Use this table</button>${why ? `<span class="muted" id="cwhy">${esc(why)}</span>` : ""}</div>`;
+  if (v) h += `<details class="cfixes" id="cfixes"><summary>What we did automatically (${v.fixes.length} steps) <small>· all of it is in the script you can download</small></summary>
+    ${v.fixes.map((f) => `<div class="cfix"><span>${esc(f.text)}</span><span class="n">${f.rows_after !== undefined ? `${f.rows_after.toLocaleString()} rows` : ""}</span>${f.note ? `<small>${esc(f.note)}</small>` : ""}</div>`).join("")}</details>`;
+  const wasOpen = $("cfixes") && $("cfixes").open;
+  $("cbody").classList.remove("hidden");
+  $("cbody").innerHTML = h;
+  if (wasOpen && $("cfixes")) $("cfixes").open = true;
+  bindCombine(list);
+}
+
+function bindCombine(list) {
+  const a = C.answers, byKey = Object.fromEntries(list.map((ch) => [ch.key, ch]));
+  if ($("cpeek")) $("cpeek").onclick = () => { C.peek = !C.peek; renderCombine(); };
+  document.querySelectorAll("[data-cconfirm]").forEach((b) => (b.onclick = () => { a[b.dataset.cconfirm].status = "confirmed"; combinePreview(); }));
+  document.querySelectorAll("[data-cchange]").forEach((b) => (b.onclick = () => { C.open = b.dataset.cchange; renderCombine(); }));
+  document.querySelectorAll("[data-cpick]").forEach((r) => (r.onchange = () => {
+    const key = r.dataset.cpick;
+    byKey[key].opts[+r.value].pick(); a[key].status = "suggested"; a[key].by = "person";
+    combinePreview();
+  }));
+  document.querySelectorAll("[data-cdone]").forEach((b) => (b.onclick = () => {
+    a[b.dataset.cdone].status = "confirmed"; a[b.dataset.cdone].by = a[b.dataset.cdone].by === "code" ? "code" : "person";
+    C.open = null; combinePreview();
+  }));
+  if ($("c-order")) $("c-order").onchange = (e) => { a.window.date_order = e.target.value || null; a.window.status = "suggested"; combinePreview(); };
+  if ($("call")) $("call").onclick = () => {
+    (C.view ? C.view.needs : ["people", "campaign", "window", "missing"]).forEach((k) => { if (a[k]) a[k].status = "confirmed"; });
+    C.open = null; combinePreview();
+  };
+  $("cuse").onclick = useCombined;
+  bindCopy();
+}
+
+async function useCombined() {
+  const btn = $("cuse"); busy(btn, true, "Building your table…"); $("cerr").textContent = "";
+  try { state.ds = await post(`/api/sources/${C.id}/answers/confirm`, { answers: C.answers, question: $("cq").value }); }
+  catch (e) { busy(btn, false); $("cerr").textContent = "😕 " + e.message; return; }
+  $("c1").classList.add("hidden");
   await showDataset();
   $("s1").scrollIntoView({ behavior: "smooth", block: "start" });
 }

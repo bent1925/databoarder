@@ -36,7 +36,10 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
 1. **One-screen combine flow.** Mockup approved 2026-11-13: [mockups/combine-flow.html](mockups/combine-flow.html)
    (published privately at https://claude.ai/artifact/81LqwpTmSo4mA9E9W6YLAu). Building it, following [plans/combine-flow.md](plans/combine-flow.md) (three PRs: server, screen, AI).
    **Phase 1 (server) merged to `main` (PR #5, reviewed by Codex, 2026-11-14):** suggested answers, previews, blocking checks,
-   the analyst note, and building from confirmed answers. 290 tests pass. Next: phase 2 (screen) on `combine-flow-screen`.
+   the analyst note, and building from confirmed answers. 290 tests pass.
+   **Phase 2 (screen) built on `combine-flow-screen`, not pushed yet:** the new combine screen replaces what
+   "Put them together first" opens; the old builder is behind "Build it step by step instead". 5 Playwright browser
+   tests; 295 tests pass. Next: Codex review, then phase 3 (AI suggestions).
    Decided 2026-11-13: keep "Confirm all suggestions" (the choices stay visible above it). Matching IDs by
    digits and adding up orders stay automatic, but become an extra choice when matching looks risky (people
    would merge, or many IDs don't match). The optional question asked before upload steers the suggestions and
@@ -87,4 +90,5 @@ connections, and monthly reruns with the same choices.
 
 - Run locally: `.venv/bin/python -m uvicorn app.main:app --reload`, then open http://localhost:8000. Messy test
   files are in `local_data/hillstrom/pull_full/`.
+- Browser tests need Chromium once: `.venv/bin/python -m playwright install chromium`. Without it they're skipped.
 - Tests: `.venv/bin/python -m pytest` (install with `.venv/bin/pip install -r requirements-dev.txt`).

@@ -260,3 +260,13 @@ more automatic fixes in the same list.
   6 s, mostly reading the Excel file twice (once to find the header row, once to read it). That double read
   already happens in the current builder.
 
+## What phase 2 changed from this plan
+
+- **"Put them together first" opens the new screen.** The old builder is behind "Build it step by step instead",
+  and any files already added carry over to it.
+- **No separate "table ready" screen.** After "Use this table" the existing dataset view shows the confirmed
+  group, plus a collapsed "What you decided" list, and the typed question is pre-filled under "Something else…".
+- **Day/month order** appears inside the window choice only when dates are ambiguous.
+- **Browser tests drive Playwright directly,** without the pytest-playwright plugin, which would have downgraded
+  the pinned pytest.
+

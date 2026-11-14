@@ -568,6 +568,11 @@ def decisions(answers: TableAnswers) -> list[str]:
 
 # ------------------------------------------------------------------------------------------ previewing
 
+def _words(name: str) -> str:
+    """A file or column name as plain words: site_visits becomes site visits."""
+    return re.sub(r"[_\s]+", " ", str(name)).strip()
+
+
 def _numbers(final: pd.DataFrame, answers: TableAnswers, group: str) -> list[dict]:
     people = len(final)
     numbers = [{"key": "people", "label": "People", "value": f"{people:,}", "sub": "one row each"}]
@@ -579,11 +584,11 @@ def _numbers(final: pd.DataFrame, answers: TableAnswers, group: str) -> list[dic
                         "sub": f"{count:,} people"})
     for events in answers.events:
         any_events = pd.to_numeric(final[events.any_into], errors="coerce")
-        numbers.append({"key": events.any_into, "label": f"Any {events.table}", "value": f"{100 * any_events.mean():.1f}%",
+        numbers.append({"key": events.any_into, "label": f"Any {_words(events.table)}", "value": f"{100 * any_events.mean():.1f}%",
                         "sub": f"{int(any_events.sum()):,} people"})
         for column, into in events.totals.items():
             total = pd.to_numeric(final[into], errors="coerce")
-            numbers.append({"key": into, "label": f"{column} per person", "value": f"{total.mean():,.2f}",
+            numbers.append({"key": into, "label": f"Total {_words(column).lower()} per person", "value": f"{total.mean():,.2f}",
                             "sub": "including 0 for people with none"})
     return numbers
 
