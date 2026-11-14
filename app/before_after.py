@@ -143,7 +143,7 @@ def daily_model(cal: pd.Series, change: pd.Timestamp) -> dict | None:
     obs = cal.dropna()
     if len(obs) < 28:
         return None
-    wd = pd.get_dummies(obs.index.weekday, drop_first=True).to_numpy(float)
+    wd = pd.get_dummies(obs.index.day_of_week, drop_first=True).to_numpy(float)
     post = (obs.index >= change).astype(float)
     X = np.column_stack([np.ones(len(obs)), post, wd])
     if np.linalg.matrix_rank(X) < X.shape[1]:

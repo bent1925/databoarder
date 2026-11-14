@@ -1,10 +1,12 @@
-fastapi
-uvicorn
-pandas
-numpy
-scipy
-statsmodels
-pydantic
-anthropic
-python-multipart
-openpyxl
+# Exact versions, so the same data and choices give the same numbers on every install.
+# The report records these versions; change them on purpose and rerun the tests.
+fastapi==0.162.4
+uvicorn==0.54.0
+pandas==3.1.1
+numpy==2.5.4
+scipy==1.18.1
+statsmodels==0.15.0
+pydantic==2.14.3
+anthropic==2.8.0
+python-multipart==0.0.33
+openpyxl==3.1.5

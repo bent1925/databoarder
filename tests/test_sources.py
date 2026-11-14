@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main, sources
-from app.schemas import ABTestSpec
+from app.schemas import ABTestSpec, ObservationalSpec
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("test_ingest_helpers", ROOT / "tests" / "test_ingest.py")
@@ -244,22 +244,39 @@ def hillstrom_pull(tmp_path):
     return tmp_path, answer
 
 
-def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hillstrom_pull, tmp_path_factory):
-    folder, answer = hillstrom_pull
+JOURNEY_SPECS = {
+    "random": ABTestSpec(group_col="segment", control="No E-Mail", treatment="Mens E-Mail", outcome_col="visit"),
+    "chose": ObservationalSpec(group_col="segment", control="No E-Mail", treatment="Mens E-Mail", outcome_col="spend",
+                               covariates=["recency", "history", "newbie"]),
+}
+
+
+def _confirm_hillstrom(folder):
     uploads = [("files", (path.name, path.read_bytes(), "application/octet-stream")) for path in sorted(folder.iterdir())]
     got = client.post("/api/sources", files=uploads).json()
     customer = next(s for s in got["steps"] if s["file"] == tool.XLSX_NAME)
     assert (customer["header_row"], customer["footer_rows"]) == (3, 2)
-
-    result = client.post(f"/api/sources/{got['source_id']}/confirm", json={
+    return client.post(f"/api/sources/{got['source_id']}/confirm", json={
         "recipe": {"steps": confirmed(helpers.hillstrom_steps()), "output": "customers"},
         "unit_column": "customer_id", "group_column": "emailed"}).json()
-    spec = ABTestSpec(group_col="segment", control="No E-Mail", treatment="Mens E-Mail", outcome_col="visit").model_dump()
-    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": "quick"}).json()
+
+
+def _numbers(text):
+    return re.findall(r"-?\d+\.\d+", text)
+
+
+@pytest.mark.parametrize("mode", ["quick", "right_answer", "research"])
+@pytest.mark.parametrize("design", ["random", "chose"])
+def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hillstrom_pull, tmp_path_factory,
+                                                                             mode, design):
+    folder, answer = hillstrom_pull
+    result = _confirm_hillstrom(folder)
+    spec = JOURNEY_SPECS[design].model_dump()
+    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": mode}).json()
 
     frozen = client.get(f"/api/datasets/{result['dataset_id']}/snapshot").content
     plain_id = client.post("/api/upload", files={"file": (main.FROZEN_NAME, frozen, "text/csv")}).json()["dataset_id"]
-    plain = client.post("/api/run", json={"dataset_id": plain_id, "spec": spec, "mode": "quick"}).json()
+    plain = client.post("/api/run", json={"dataset_id": plain_id, "spec": spec, "mode": mode}).json()
     assert report["effect"] == plain["effect"]
     assert report["repro"]["source"]["table_sha256"] == report["repro"]["data_sha256"]
     assert len(report["repro"]["source"]["inputs"]) == 4
@@ -272,7 +289,55 @@ def test_whole_journey_report_matches_a_plain_upload_and_script_reproduces_it(hi
     (other / main.FROZEN_NAME).write_bytes(frozen)
     (other / "repro.py").write_text(plain["script"])
     direct = subprocess.run([sys.executable, "repro.py"], cwd=other, check=True, capture_output=True, text=True)
-    assert rebuilt.stdout == direct.stdout and re.search(r"\d", rebuilt.stdout)
+    assert rebuilt.stdout == direct.stdout
+    effect = report["effect"]
+    printed = {float(n) for n in _numbers(rebuilt.stdout)}
+    for key in ("diff", "ci_low", "ci_high"):
+        assert any(abs(n - effect[key]) < 1e-3 for n in printed), (key, effect[key], rebuilt.stdout)
+
+
+def _hillstrom_script(folder):
+    result = _confirm_hillstrom(folder)
+    spec = JOURNEY_SPECS["random"].model_dump()
+    report = client.post("/api/run", json={"dataset_id": result["dataset_id"], "spec": spec, "mode": "quick"}).json()
+    (folder / "repro.py").write_text(report["script"])
+    return report
+
+
+def test_script_stops_when_an_original_file_has_changed(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    changed = folder / report["repro"]["source"]["inputs"][0]["file"]
+    changed.write_bytes(changed.read_bytes() + b"\n")
+    run = subprocess.run([sys.executable, "repro.py"], cwd=folder, capture_output=True, text=True)
+    assert run.returncode != 0 and "isn't the same file the report used" in run.stderr
+    assert not (folder / main.FROZEN_NAME).exists()
+
+
+def test_script_stops_when_an_original_file_is_missing(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    (folder / report["repro"]["source"]["inputs"][-1]["file"]).unlink()
+    run = subprocess.run([sys.executable, "repro.py"], cwd=folder, capture_output=True, text=True)
+    assert run.returncode != 0 and "isn't in this folder" in run.stderr
+
+
+def test_script_stops_when_the_rebuilt_table_differs(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    script = report["script"].replace(f"TABLE_SHA256 = {report['repro']['source']['table_sha256']!r}",
+                                      "TABLE_SHA256 = '0' * 64")
+    (folder / "repro.py").write_text(script)
+    run = subprocess.run([sys.executable, "repro.py"], cwd=folder, capture_output=True, text=True)
+    assert run.returncode != 0 and "doesn't match the one the report analyzed" in run.stderr
+
+
+def test_report_records_the_excel_reader_version(hillstrom_pull):
+    folder, _ = hillstrom_pull
+    report = _hillstrom_script(folder)
+    import openpyxl
+    assert report["repro"]["source"]["versions"] == {"openpyxl": openpyxl.__version__}
+    assert f"openpyxl {openpyxl.__version__}" in report["script"]
 
 
 def test_confirmed_labels_reach_the_analysis_and_the_script_unchanged(tmp_path):
@@ -304,3 +369,122 @@ def test_an_original_named_like_the_finished_table_is_not_overwritten():
 def test_page_has_the_new_screen():
     page = client.get("/").text
     assert 'id="m1"' in page and "Put them together first" in page
+
+
+# ------------------------------------------------- answers from building the table carry into the question
+
+# 'cohort' looks like a group column by name, but the person says 'got_email' shows who got the campaign.
+EMAILED = "id,cohort,got_email,signup_date,spend\n" + "".join(
+    f"{i},{'spring' if i % 3 else 'fall'},{'yes' if i % 2 else 'no'},2024-03-{1 + i % 20:02d},{(i * 7) % 50}\n"
+    for i in range(1, 81))
+
+
+# Two date columns: the person says purchases happened on 'bought_on', not 'signup_date'.
+TWO_DATES = "id,cohort,signup_date,bought_on,spend\n" + "".join(
+    f"{i},{'spring' if i % 3 else 'fall'},2024-01-{1 + i % 20:02d},2024-03-{1 + i % 20:02d},{(i * 7) % 50}\n"
+    for i in range(1, 81))
+
+
+def _built(group=None, time_column=None, content=EMAILED):
+    got = add(csv_file("people.csv", content))
+    response = confirm(got["source_id"], confirmed(got["steps"]), unit="id", group=group, time_column=time_column)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_plain_upload_has_nothing_confirmed():
+    result = client.post("/api/upload", files={"file": ("people.csv", EMAILED.encode(), "text/csv")}).json()
+    assert result["confirmed"] is None
+    first = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design=random").json()
+    assert first["questions"][0]["spec"]["group_col"] == "cohort"     # without an answer, the name is a guess
+
+
+def test_confirmed_group_column_is_used_for_every_suggestion():
+    result = _built(group="got_email")
+    assert result["confirmed"] == {"group_col": "got_email", "date_col": None}
+    for design in ("random", "chose", "unsure", "one_date_comparison"):
+        questions = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design={design}").json()
+        assert questions["questions"], design
+        assert {q["spec"]["group_col"] for q in questions["questions"]} == {"got_email"}, design
+
+
+def test_confirmed_group_column_makes_comparing_groups_the_starting_point():
+    designs = _built(group="got_email")["designs"]
+    assert designs["default"] == "chose"           # they weren't asked how people were picked, so don't assume random
+    assert all(option["ok"] for option in designs["options"])
+
+
+def test_typed_question_uses_the_confirmed_group_without_ai():
+    result = _built(group="got_email")
+    interp = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "Did spend go up?",
+                                            "design": "random"}).json()
+    assert interp["spec"]["group_col"] == "got_email"
+    assert interp["spec"]["outcome_col"] == "spend"
+
+
+def test_ai_cannot_quietly_swap_the_confirmed_group(monkeypatch):
+    from app import translator
+    seen = {}
+
+    def fake(question, profile, design, confirmed=None):
+        seen["confirmed"] = confirmed
+        return {"analysis_type": "ab_test", "group_col": "cohort", "control": "fall", "treatment": "spring",
+                "outcome_col": "spend"}
+
+    monkeypatch.setattr(translator, "_llm_spec", fake)
+    result = _built(group="got_email")
+    interp = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "Did spring spend more?",
+                                            "design": "random"}).json()
+    assert seen["confirmed"]["group_col"] == "got_email"
+    assert interp["spec"]["group_col"] == "got_email"
+    assert any("you said 'got_email' shows who got the campaign" in note for note in interp["notes"])
+
+
+def test_everyone_got_it_rules_out_group_comparisons_and_uses_the_chosen_date():
+    result = _built(time_column="signup_date")
+    assert result["confirmed"] == {"group_col": None, "date_col": "signup_date"}
+    options = {option["key"]: option for option in result["designs"]["options"]}
+    assert result["designs"]["default"] == "one_date" and options["one_date"]["ok"]
+    for key in ("random", "chose", "unsure", "one_date_comparison"):
+        assert not options[key]["ok"] and "everyone got the campaign" in options[key]["why"]
+    refused = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "x", "design": "random"})
+    assert refused.status_code == 400
+    questions = client.get(f"/api/suggestions?dataset_id={result['dataset_id']}&mode=quick&design=one_date").json()
+    assert {q["spec"]["date_col"] for q in questions["questions"]} == {"signup_date"}
+
+
+def _ask_with_fake_ai(monkeypatch, result, answer, design):
+    from app import translator
+    monkeypatch.setattr(translator, "_llm_spec", lambda question, profile, design, confirmed=None: answer)
+    response = client.post("/api/ask", json={"dataset_id": result["dataset_id"], "question": "Did spend go up?",
+                                              "design": design})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_ai_cannot_quietly_swap_the_confirmed_date(monkeypatch):
+    result = _built(time_column="bought_on", content=TWO_DATES)
+    for design in ("one_date", None):
+        interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "before_after", "date_col": "signup_date",
+                                                         "outcome_col": "spend", "change_date": ""}, design)
+        assert interp["spec"]["date_col"] == "bought_on", design
+        assert any("you said 'bought_on' is the date column" in note for note in interp["notes"]), design
+
+
+def test_ai_answer_using_the_confirmed_date_is_kept(monkeypatch):
+    result = _built(time_column="bought_on", content=TWO_DATES)
+    interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "before_after", "date_col": "bought_on",
+                                                     "outcome_col": "spend", "change_date": ""}, "one_date")
+    assert interp["source"] == "llm" and interp["spec"]["date_col"] == "bought_on"
+    assert not any("you said" in note for note in interp["notes"])
+
+
+def test_ai_cannot_compare_groups_when_everyone_got_it(monkeypatch):
+    # With no design picked yet, the AI chooses the kind of analysis, so it could split people into groups.
+    result = _built(time_column="bought_on", content=TWO_DATES)
+    interp = _ask_with_fake_ai(monkeypatch, result, {"analysis_type": "ab_test", "group_col": "cohort",
+                                                     "control": "fall", "treatment": "spring",
+                                                     "outcome_col": "spend"}, None)
+    assert interp["spec"]["analysis_type"] == "before_after"
+    assert interp["spec"]["date_col"] == "bought_on"
+    assert any("you said everyone got the campaign" in note for note in interp["notes"])

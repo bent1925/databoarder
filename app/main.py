@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from .analysis import analyze
-from .ingest import (FROZEN_NAME, build_table, inspect_files, preview_recipe, read_frozen, require_comparison,
+from .ingest import (FROZEN_NAME, openpyxl_version, build_table, inspect_files, preview_recipe, read_frozen, require_comparison,
                      require_one_row_per_unit, require_time_span, script_block, suggest_read_steps)
 from .schemas import AnySpec, DataRecipe, Mode
 from .observational import covariate_candidates
@@ -66,6 +66,13 @@ class ConfirmBody(BaseModel):
     time_column: Optional[str] = None
 
 
+def _confirmed(source: Optional[dict]) -> Optional[dict]:
+    """What the person decided about columns while building the table. These are their choices, not guesses."""
+    if not source:
+        return None
+    return {"group_col": source.get("group_column"), "date_col": source.get("time_column")}
+
+
 def _get(dataset_id: str) -> dict:
     ds = DATASETS.get(dataset_id)
     if not ds:
@@ -101,7 +108,8 @@ def _ingest(raw: bytes, name: str, source: Optional[dict] = None, source_script:
         "name": name,
         "rows": int(df.shape[0]),
         "columns": profile_columns(df),
-        "designs": design_options(df),
+        "designs": design_options(df, _confirmed(source)),
+        "confirmed": _confirmed(source),
         "prep": {"steps": [x.text for x in steps], "notes": notes},
         "preview": df.head(5).astype(object).where(df.head(5).notna(), None).to_dict("records"),
         "source": source,
@@ -192,10 +200,11 @@ def confirm_source(source_id: str, body: ConfirmBody):
     if len(built.csv_bytes) > MAX_BYTES:
         raise HTTPException(413, "The finished table is larger than 25 MB. Roll it up or keep fewer columns.")
     source = {"kind": "recipe", "inputs": built.inputs, "recipe": recipe.model_dump(), "table_sha256": built.sha256,
-              "table_file": built.name, "read_options": built.read_options,
+              "table_file": built.name, "read_options": built.read_options, "versions": {"openpyxl": openpyxl_version()},
               "unit_column": body.unit_column, "group_column": body.group_column, "time_column": body.time_column,
               "steps": [{key: entry[key] for key in ("text", "rows_before", "rows_after", "note")} for entry in built.log]}
-    result = _ingest(built.csv_bytes, built.name, source, script_block(recipe, built.name), df=table, check=check)
+    script = script_block(recipe, built.name, built.inputs, built.sha256)
+    result = _ingest(built.csv_bytes, built.name, source, script, df=table, check=check)
     path = SOURCES.snapshot_path(source_id, result["dataset_id"])
     path.write_bytes(built.csv_bytes)
     DATASETS[result["dataset_id"]]["snapshot_path"] = path
@@ -215,12 +224,12 @@ def download_snapshot(dataset_id: str):
 def ask(body: AskBody):
     ds = _get(body.dataset_id)
     if body.design:
-        opt = {o["key"]: o for o in design_options(ds["df"])["options"]}.get(body.design)
+        opt = {o["key"]: o for o in design_options(ds["df"], _confirmed(ds.get("source")))["options"]}.get(body.design)
         if not opt:
             raise HTTPException(400, "Unknown choice.")
         if not opt["ok"]:
             raise HTTPException(400, opt["why"])
-    result = interpret(body.question, ds["df"], body.design)
+    result = interpret(body.question, ds["df"], body.design, _confirmed(ds.get("source")))
     return result.model_dump()
 
 
@@ -241,7 +250,7 @@ def run(body: RunBody):
 @app.get("/api/suggestions")
 def suggestions(dataset_id: str, mode: Mode = "quick", design: Optional[str] = None):
     ds = _get(dataset_id)
-    return {"questions": suggest_questions(ds["df"], mode, design=design)}
+    return {"questions": suggest_questions(ds["df"], mode, design=design, confirmed=_confirmed(ds.get("source")))}
 
 
 @app.get("/api/covariates")
