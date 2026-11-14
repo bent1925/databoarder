@@ -6,6 +6,7 @@ Needs Playwright and its Chromium browser:
 Without them these tests are skipped, so the rest of the suite still runs anywhere.
 """
 import importlib.util
+import json
 import socket
 import threading
 import time
@@ -157,3 +158,32 @@ def test_the_step_by_step_builder_is_still_there(page, pulls):
     page.click("#cbuilder")
     page.wait_for_selector("#m1:not(.hidden) #msteps .mstep")
     assert page.is_hidden("#c1")
+
+
+def test_a_table_that_fails_to_build_says_why_and_how_to_proceed(page, tmp_path):
+    people = "id,age_band\n" + "".join(f"C-{i:03d},{20 + 10 * (i % 4)}\n" for i in range(1, 41))
+    sends = "cust,version,sent\n" + "".join(f"{i},{'A' if i % 2 else 'B'},2024-03-01\n" for i in range(1, 21))
+    orders = "customer_ref,order_date,amount\n" + "".join(f"{i},2024-03-0{1 + i % 5},{i}.50\n" for i in range(1, 21))
+    orders += "21,2024-03-02,N/A\n"
+    files = []
+    for name, text in (("people.csv", people), ("email_sends.csv", sends), ("orders.csv", orders)):
+        (tmp_path / name).write_text(text)
+        files.append(str(tmp_path / name))
+
+    def total_the_amount(route):     # an answer whose total can't be worked out, as if a person had picked it
+        reply = route.fetch()
+        body = reply.json()
+        body["answers"]["events"][0]["totals"] = {"amount": "total_amount"}
+        route.fulfill(response=reply, body=json.dumps(body))
+
+    page.route("**/answers/suggest", total_the_amount)
+    start(page, files)
+    page.wait_for_selector("#cproblem")
+    problem = page.inner_text("#cproblem")
+    assert "couldn't be put together" in problem and "'amount' needs to be numbers" in problem
+    assert "Build it step by step instead" in problem
+    assert page.locator("#ctiles").count() == 0
+    page.click("#call")
+    page.wait_for_selector('[data-choice="people"].done')
+    assert page.is_disabled("#cuse") and page.inner_text("#cwhy") == "Fix the problem above first"
+

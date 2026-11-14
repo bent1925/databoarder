@@ -246,9 +246,17 @@ def _events(tables: dict, found: dict, campaign_table: Optional[str], people_col
             notes.append(f"{name} was left out: it has no dates, so its rows can't be limited to the campaign window.")
             continue
         date_column = max(dated, key=lambda column: table[column].notna().sum())
-        totals = {column: _unique_name(f"total_{re.sub(r'[^0-9a-zA-Z]+', '_', column).strip('_').lower()}", taken)
-                  for column in table.columns
-                  if column not in (id_column, date_column) and _MONEY.search(column) and _is_number_column(table[column])}
+        totals = {}
+        for column in table.columns:
+            if column in (id_column, date_column) or not _MONEY.search(column) or not _is_number_column(table[column]):
+                continue
+            values = table[column].dropna().astype(str)
+            bad = values[pd.to_numeric(values, errors="coerce").isna()]
+            if len(bad):     # adding these up would fail, so say why the total isn't there
+                notes.append(f"'{column}' in {name} wasn't added up: {len(bad):,} values aren't numbers, such as "
+                             f"'{bad.iloc[0]}'. Ask your analyst for a file without them, or build the table step by step.")
+                continue
+            totals[column] = _unique_name(f"total_{re.sub(r'[^0-9a-zA-Z]+', '_', column).strip('_').lower()}", taken)
         events.append(EventsTable(table=name, id_column=id_column, date_column=date_column,
                                   any_into=_unique_name(f"any_{name}", taken), totals=totals))
     return events

@@ -728,7 +728,7 @@ async function combinePreview() {
   try {
     const view = await post(`/api/sources/${C.id}/answers/preview`, { answers: C.answers });
     if (run !== C.run) return;
-    C.view = view; C.error = "";
+    C.view = view; C.error = view.error || "";
     let added = false;
     if (view.needs.includes("match") && !C.answers.match) { C.answers.match = { status: "suggested", by: "code", action: "leave_out" }; added = true; }
     if (view.needs.includes("returns") && !C.answers.returns) { C.answers.returns = { status: "suggested", by: "code", action: "count" }; added = true; }
@@ -832,14 +832,16 @@ function renderCombine() {
   const done = needs.filter((k) => C.answers[k] && C.answers[k].status === "confirmed").length;
   const waiting = needs.filter((k) => C.answers[k] && C.answers[k].status !== "confirmed").length;
   let h = "";
-  if (v) {
+  if (v && !v.error) {
     h += `<div class="mhead">Here's your table</div><p class="how" style="margin:0 0 6px">Check these numbers look right to you.</p>
       <div class="ctiles" id="ctiles">${v.numbers.map((n) => `<div class="ctile"><div class="k">${esc(n.label)}</div><div class="v">${esc(n.value)}</div><div class="s">${esc(n.sub)}</div></div>`).join("")}</div>
       <button class="linkish" id="cpeek">${C.peek ? "Hide the rows" : "👀 Peek at 5 rows"}</button>
       ${C.peek ? `<div class="scroll" style="margin-top:8px"><table class="preview"><thead><tr>${v.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
         <tbody>${v.sample.map((r) => `<tr>${v.columns.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}`;
   }
-  if (C.error) h += `<div class="banner warn" id="cproblem">⛔ ${esc(C.error)}</div>`;
+  if (C.error) h += `<div class="banner warn" id="cproblem">⛔ The table couldn't be put together: ${esc(C.error)}
+    <ul><li>If a choice below caused this, change it.</li><li>Otherwise, ask your analyst for a corrected file, or use
+    <b>Build it step by step instead</b> at the bottom.</li></ul></div>`;
   h += C.notes.map((t) => `<div class="note">💡 ${esc(t)}</div>`).join("");
   h += `<div class="mhead">Your choices <span class="muted" style="font-weight:800">· ${done} of ${needs.length} confirmed</span></div>
     <p class="how" style="margin:0 0 10px">These change the answer, so they're yours to make. We've suggested an answer for each.</p>
@@ -848,10 +850,10 @@ function renderCombine() {
     h += (v.info || []).map((it) => `<div class="note">💡 ${esc(it.text)}</div>`).join("");
     h += blockedHtml(v.blocked, v.note);
   }
-  const why = !v ? "Fix the problem above first" : v.blocked.length ? "Can't be used yet: see above" : waiting ? `${waiting} still to confirm` : "";
+  const why = !v || v.error ? "Fix the problem above first" : v.blocked.length ? "Can't be used yet: see above" : waiting ? `${waiting} still to confirm` : "";
   h += `<div class="row">${waiting ? `<button class="btn soft" id="call">✅ Confirm ${waiting === 1 ? "the last suggestion" : `all ${waiting} suggestions`}</button>` : ""}
     <button class="btn" id="cuse" ${v && v.ready ? "" : "disabled"}>Use this table</button>${why ? `<span class="muted" id="cwhy">${esc(why)}</span>` : ""}</div>`;
-  if (v) h += `<details class="cfixes" id="cfixes"><summary>What we did automatically (${v.fixes.length} steps) <small>· all of it is in the script you can download</small></summary>
+  if (v && !v.error) h += `<details class="cfixes" id="cfixes"><summary>What we did automatically (${v.fixes.length} steps) <small>· all of it is in the script you can download</small></summary>
     ${v.fixes.map((f) => `<div class="cfix"><span>${esc(f.text)}</span><span class="n">${f.rows_after !== undefined ? `${f.rows_after.toLocaleString()} rows` : ""}</span>${f.note ? `<small>${esc(f.note)}</small>` : ""}</div>`).join("")}</details>`;
   const wasOpen = $("cfixes") && $("cfixes").open;
   $("cbody").classList.remove("hidden");

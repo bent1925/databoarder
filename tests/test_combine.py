@@ -376,3 +376,25 @@ def test_coverage_reads_dates_in_the_confirmed_order():
     assert shown["blocked"] == [] and shown["error"] is None
     answers["window"]["date_order"] = "month_first"
     assert "ends on 2024-03-04" in preview(source_id, answers).json()["blocked"][0]
+
+
+# ------------------------------------------------------------------------------- Codex review on PR #6
+
+ORDERS_WITH_TEXT = "customer_ref,order_date,amount\n" + "".join(
+    f"{i},2024-03-0{1 + i % 5},{i}.50\n" for i in range(1, 21)) + "21,2024-03-02,N/A\n"
+
+
+def test_an_amount_with_text_in_it_isnt_suggested_for_a_total():
+    got = suggest(small(orders=ORDERS_WITH_TEXT))
+    assert got["answers"]["events"][0]["totals"] == {}
+    assert "'amount' in orders wasn't added up: 1 values aren't numbers, such as 'N/A'" in got["notes"][0]
+
+
+def test_a_failed_build_comes_back_as_an_error_the_page_can_show():
+    source_id = small(orders=ORDERS_WITH_TEXT)
+    answers = suggest(source_id)["answers"]
+    answers["events"][0]["totals"] = {"amount": "total_amount"}
+    shown = preview(source_id, answers)
+    assert shown.status_code == 200
+    body = shown.json()
+    assert "'amount' needs to be numbers" in body["error"] and not body["ready"] and body["numbers"] == []
