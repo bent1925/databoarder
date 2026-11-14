@@ -398,3 +398,14 @@ def test_a_failed_build_comes_back_as_an_error_the_page_can_show():
     assert shown.status_code == 200
     body = shown.json()
     assert "'amount' needs to be numbers" in body["error"] and not body["ready"] and body["numbers"] == []
+
+
+def test_window_lengths_follow_the_confirmed_date_order():
+    # Suggestions guess month first, so 02/03 and 03/04 look like early March and only 4 days are covered.
+    orders = "customer_ref,order_date,amount\n3,02/03/2024,10.50\n25,03/04/2024,7.25\n"
+    source_id = small(orders=orders)
+    answers = suggest(source_id)["answers"]
+    answers["window"]["date_order"] = "day_first"          # 3 April: 1 March to 3 April is 34 days
+    assert preview(source_id, answers).json()["window_days"] == [7, 14, 30, 34]
+    answers["window"]["date_order"] = "month_first"
+    assert preview(source_id, answers).json()["window_days"] == [4]

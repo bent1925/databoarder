@@ -761,8 +761,10 @@ function choiceList() {
     why: c.kind === "list" ? `Everyone else is "${c.none_label}". They're the comparison group.` : `Each value in '${c.versions_column}' becomes a group to compare.` });
 
   const w = a.window, own = c.kind === "list" && c.date_column;
-  const windowOpts = (C.options.window_days || []).map((d) => ({ label: `${d} days: ${w.start_date} to ${addDays(w.start_date, d - 1)}`,
-    small: d === Math.max(...C.options.window_days) ? "All the dates your files cover." : "Activity after this is left out.",
+  // The preview reads dates in the confirmed day/month order, so its window lengths win over the first suggestion's.
+  const windowDays = (v && v.window_days && v.window_days.length ? v.window_days : C.options.window_days) || [];
+  const windowOpts = windowDays.map((d) => ({ label: `${d} days: ${w.start_date} to ${addDays(w.start_date, d - 1)}`,
+    small: d === Math.max(...windowDays) ? "All the dates your files cover." : "Activity after this is left out.",
     on: () => w.days === d, pick: () => { w.days = d; } }));
   list.push({ key: "window", q: "Which activity counts?", opts: windowOpts,
     answer: `${w.days} days from ${own ? "each person's send date" : w.start_date}`,

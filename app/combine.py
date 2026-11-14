@@ -431,11 +431,13 @@ def review(answers: TableAnswers, tables: dict) -> dict:
         sent = _recipe_dates(tables[campaign.table][campaign.date_column], campaign.date_column, order).dropna()
         if not sent.empty:
             latest = max(latest, sent.max().normalize())
+    shortest = None
     for events in answers.events:
         when = _recipe_dates(tables[events.table][events.date_column], events.date_column, order).dropna()
         if when.empty:
             continue
         covered = int((when.max().normalize() - latest).days) + 1
+        shortest = covered if shortest is None else min(shortest, covered)
         if answers.window.days > covered:
             blocked.append(f"{events.table} ends on {when.max():%Y-%m-%d}, so a {answers.window.days}-day window isn't "
                            f"complete for everyone and would undercount. Choose {max(covered, 1)} days or fewer, or ask "
@@ -463,7 +465,10 @@ def review(answers: TableAnswers, tables: dict) -> dict:
     if negative:
         needed.append("returns")
     waiting = [name for name in needed if getattr(answers, name) is None or getattr(answers, name).status != "confirmed"]
-    return {"blocked": blocked, "risks": risks, "info": info, "waiting": waiting, "needs": needed,
+    # The windows the data fully covers, with dates read as confirmed. Suggestions guessed the order, so this can differ.
+    window_days = (sorted({days for days in WINDOW_DAYS if days <= shortest} | {shortest})
+                   if shortest is not None and shortest >= 1 else [])
+    return {"blocked": blocked, "risks": risks, "info": info, "waiting": waiting, "needs": needed, "window_days": window_days,
             "note": analyst_note(asks) if asks else None, "ready": not blocked and not waiting}
 
 

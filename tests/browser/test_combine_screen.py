@@ -81,7 +81,9 @@ def page(browser, server):
     opened = context.new_page()
     errors = []
     opened.on("pageerror", lambda error: errors.append(str(error)))
-    opened.on("console", lambda message: message.type == "error" and errors.append(message.text))
+    # A 400 the page handles (like "say whether the day or the month comes first") is logged by the browser too.
+    opened.on("console", lambda message: message.type == "error" and not message.text.startswith(
+        "Failed to load resource") and errors.append(message.text))
     opened.goto(server)
     yield opened
     context.close()
@@ -186,4 +188,24 @@ def test_a_table_that_fails_to_build_says_why_and_how_to_proceed(page, tmp_path)
     page.click("#call")
     page.wait_for_selector('[data-choice="people"].done')
     assert page.is_disabled("#cuse") and page.inner_text("#cwhy") == "Fix the problem above first"
+
+
+def test_choosing_the_date_order_updates_the_windows_on_offer(page, tmp_path):
+    people = "id,age_band\n" + "".join(f"C-{i:03d},{20 + 10 * (i % 4)}\n" for i in range(1, 41))
+    sends = "cust,version,sent\n" + "".join(f"{i},{'A' if i % 2 else 'B'},2024-03-01\n" for i in range(1, 21))
+    orders = "customer_ref,order_date,amount\n3,02/03/2024,10.50\n25,03/04/2024,7.25\n"
+    files = []
+    for name, text in (("people.csv", people), ("email_sends.csv", sends), ("orders.csv", orders)):
+        (tmp_path / name).write_text(text)
+        files.append(str(tmp_path / name))
+    start(page, files)
+    page.wait_for_selector("#c-order")
+    assert "could be March or April" in page.inner_text("#cproblem")
+    page.select_option("#c-order", "day_first")
+    page.wait_for_selector("#ctiles")
+    window = page.locator('[data-choice="window"]')
+    window.get_by_role("button", name="Change").click()
+    labels = window.locator("label.copt").all_inner_texts()
+    assert any(label.startswith("34 days: 2024-03-01 to 2024-04-03") for label in labels)
+    assert any(label.startswith("30 days") for label in labels)
 
