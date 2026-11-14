@@ -33,7 +33,11 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
 
 ## Next up, in order
 
-1. **One-screen combine flow.** Start with a clickable mockup, not code. Replace the step-by-step recipe builder
+1. **One-screen combine flow.** Mockup approved 2026-11-13: [mockups/combine-flow.html](mockups/combine-flow.html)
+   (published privately at https://claude.ai/artifact/81LqwpTmSo4mA9E9W6YLAu). Next: build it for real.
+   Still to decide: whether "Confirm all suggestions" is allowed; whether matching IDs by digits and adding up
+   orders should be choices instead of automatic fixes; whether asking the question first shapes the suggestions.
+   Add browser tests (Playwright) with it, since the screens have no automated tests yet. Original idea: Replace the step-by-step recipe builder
    with: upload the files, see the finished table with sanity numbers ("10,000 customers, 50% got the email"),
    and answer only the 3–4 choices that change the answer (who counts, who got the campaign, what counts as
    the result and over what window, what to do with people who don't match or appear twice). Each answer

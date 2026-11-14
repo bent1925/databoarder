@@ -1,0 +1,424 @@
+<title>One-Screen Combine Flow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap">
+<style>
+  /* Layout: one centered column, like the real app. Single light look, matching static/index.html. */
+  :root {
+    --ink: #2d2a4a; --muted: #6b678f; --bg: #fff7e6; --card: #ffffff; --line: #e8e2f4;
+    --purple: #7c5cff; --purple-soft: #ece7ff;
+    --yellow: #ffd23f; --yellow-soft: #fff3c4;
+    --green: #17c28b; --green-soft: #d6f7ea;
+    --pink: #ff5c9d; --pink-soft: #ffe1ee;
+    --orange-soft: #ffe8d0;
+    --on-accent: #ffffff;
+    --dot: rgba(124, 92, 255, .16);
+    --font: ui-rounded, "SF Pro Rounded", "Nunito", "Avenir Next", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink); font: 500 16px/1.5 var(--font);
+    background: var(--bg) radial-gradient(circle at 1px 1px, var(--dot) 1.6px, transparent 0) 0 0 / 24px 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1, h2, h3 { text-wrap: balance; }
+
+  .mockbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between;
+    background: var(--ink); color: var(--bg); border-radius: 0 0 18px 18px; padding: 10px 16px; font-size: 14px; font-weight: 700; }
+  .mockbar b { color: var(--yellow); }
+  .switch { display: inline-flex; gap: 4px; background: var(--bg); border-radius: 999px; padding: 3px; }
+  .switch button { border: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 800; font-size: 13px;
+    padding: 4px 12px; border-radius: 999px; cursor: pointer; }
+  .switch button.on { background: var(--yellow); }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin: 24px 0 20px; }
+  header h1 { font-size: 30px; margin: 0; font-weight: 900; letter-spacing: -.02em; }
+  header h1 span { color: var(--purple); }
+  .muted { color: var(--muted); }
+
+  .card { background: var(--card); border: 2.5px solid var(--ink); border-radius: 24px; padding: 20px 22px;
+    box-shadow: 0 5px 0 var(--ink); margin-bottom: 22px; }
+  .title { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; font-size: 20px; font-weight: 900; }
+  .ic { width: 42px; height: 42px; border-radius: 14px; display: inline-grid; place-items: center; font-size: 22px;
+    border: 2.5px solid var(--ink); flex: none; background: var(--yellow); }
+  .ic.p { background: var(--purple-soft); } .ic.g { background: var(--green-soft); } .ic.k { background: var(--pink-soft); }
+  .lead { margin: 0 0 16px; color: var(--muted); font-weight: 700; font-size: 15px; }
+
+  .btn { background: var(--purple); color: var(--on-accent); border: 2.5px solid var(--ink); border-radius: 16px; padding: 11px 22px;
+    font: inherit; font-weight: 900; font-size: 16px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); transition: transform .08s, box-shadow .08s; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 5px 0 var(--ink); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  .btn:disabled { opacity: .5; cursor: default; transform: none; box-shadow: 0 4px 0 var(--ink); }
+  .btn.soft { background: var(--yellow); color: var(--ink); }
+  .btn.small { padding: 6px 14px; font-size: 14px; border-radius: 12px; box-shadow: 0 3px 0 var(--ink); }
+  .linkish { color: var(--purple); background: none; border: 0; padding: 0; font: inherit; font-weight: 800; cursor: pointer; }
+  .linkish:hover { text-decoration: underline; }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+  .row { display: flex; gap: 12px 16px; align-items: center; flex-wrap: wrap; }
+
+  /* upload */
+  label.f { display: block; font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+  textarea { width: 100%; min-height: 64px; resize: vertical; border: 2.5px solid var(--ink); border-radius: 16px; padding: 10px 14px;
+    font: inherit; font-weight: 700; background: var(--card); color: var(--ink); }
+  .drop { border: 3px dashed var(--purple); background: var(--purple-soft); border-radius: 20px; padding: 14px; margin: 16px 0; }
+  .file { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; background: var(--card);
+    border: 2px solid var(--ink); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; }
+  .file:last-child { margin-bottom: 0; }
+  .file .fi { grid-row: span 2; font-size: 22px; }
+  .file b { font-weight: 900; overflow-wrap: anywhere; min-width: 0; }
+  .file span { font-size: 14px; font-weight: 700; color: var(--muted); min-width: 0; }
+
+  /* the table summary */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 4px 0 12px; }
+  .tile { border: 2px solid var(--ink); border-radius: 16px; padding: 10px 14px; background: var(--card); min-width: 0; }
+  .tile .k { font-size: 13px; font-weight: 800; color: var(--muted); }
+  .tile .v { font-size: 26px; font-weight: 900; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .tile .s { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .tile.dim .v { color: var(--line); }
+  .changed { animation: flash .9s ease-out; }
+  @keyframes flash { from { background: var(--yellow); } to { background: var(--card); } }
+  @media (prefers-reduced-motion: reduce) { .changed { animation: none; } .btn { transition: none; } }
+
+  .peek { overflow-x: auto; margin-top: 10px; border: 2px solid var(--line); border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 12px; white-space: nowrap; }
+  th { font-weight: 900; border-bottom: 2px solid var(--line); }
+  td { font-weight: 700; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+
+  /* choices */
+  .choices-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 22px 0 10px; }
+  .choices-head h3 { margin: 0; font-size: 18px; font-weight: 900; }
+  .count { font-size: 14px; font-weight: 800; color: var(--muted); }
+  .choice { border: 2.5px dashed var(--ink); border-radius: 18px; padding: 14px 16px; margin-bottom: 12px; background: var(--yellow-soft); }
+  .choice.done { border-style: solid; background: var(--green-soft); }
+  .choice.ask { border-style: solid; background: var(--orange-soft); }
+  .choice.bad { border-style: solid; background: var(--pink-soft); }
+  .choice .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .choice .q { font-weight: 900; font-size: 16px; margin: 0; }
+  .pill { font-size: 12.5px; font-weight: 900; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; background: var(--card); white-space: nowrap; }
+  .answer { font-weight: 800; margin: 6px 0 2px; }
+  .why { font-size: 14px; font-weight: 700; color: var(--muted); margin: 0; }
+  .choice .row { margin-top: 10px; }
+  .opts { display: grid; gap: 8px; margin-top: 10px; }
+  .opt { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: start; background: var(--card);
+    border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; cursor: pointer; }
+  .opt:hover { border-color: var(--purple); }
+  .opt.on { border-color: var(--ink); }
+  .opt input { margin-top: 4px; accent-color: var(--purple); width: 17px; height: 17px; }
+  .opt b { font-weight: 800; }
+  .opt small { display: block; grid-column: 2; font-size: 13.5px; font-weight: 700; color: var(--muted); }
+
+  .banner { border: 2.5px solid var(--ink); border-radius: 18px; padding: 12px 16px; margin: 12px 0; font-weight: 800; }
+  .banner.bad { background: var(--pink-soft); } .banner.good { background: var(--green-soft); } .banner.ask { background: var(--orange-soft); }
+  .banner p { margin: 4px 0 0; font-weight: 700; }
+  .letter { white-space: pre-wrap; background: var(--card); border: 2px solid var(--ink); border-radius: 14px; padding: 12px 14px;
+    font-weight: 700; font-size: 14.5px; margin: 10px 0; }
+
+  details.fixes { margin-top: 18px; border-top: 2px solid var(--line); padding-top: 12px; }
+  details.fixes summary { cursor: pointer; font-weight: 900; }
+  details.fixes summary small { font-weight: 700; color: var(--muted); }
+  .fixlist { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+  .fixlist li { display: grid; grid-template-columns: 1fr auto; gap: 12px; font-size: 14.5px; font-weight: 700;
+    border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .fixlist li > span:first-child { min-width: 0; }
+  .fixlist .n { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; text-align: right; }
+  .fixlist code { font: 800 13px var(--font); background: var(--purple-soft); border-radius: 6px; padding: 0 5px; }
+
+  .summary { list-style: none; padding: 0; margin: 8px 0 16px; display: grid; gap: 8px; }
+  .summary li { background: var(--green-soft); border: 2px solid var(--ink); border-radius: 14px; padding: 8px 12px; font-weight: 700; }
+  .summary li b { font-weight: 900; }
+
+  .notes { font-size: 14px; color: var(--muted); font-weight: 700; margin-top: 30px; }
+  .notes h3 { color: var(--ink); font-size: 15px; margin: 0 0 6px; }
+  .notes ul { margin: 0; padding-left: 20px; }
+  @media (max-width: 520px) { .tile .v { font-size: 22px; } .fixlist li { grid-template-columns: 1fr; } .fixlist .n { text-align: left; } }
+</style>
+
+<div class="wrap">
+  <div class="mockbar">
+    <span><b>Mockup.</b> Nothing is uploaded or calculated here. The numbers come from the Hillstrom test pull.</span>
+    <span class="switch" role="group" aria-label="Which test pull">
+      <button type="button" id="sc-full" class="on" aria-pressed="true">Full pull</button>
+      <button type="button" id="sc-treated" aria-pressed="false">Only emailed people</button>
+    </span>
+  </div>
+
+  <header>
+    <h1>Data<span>boarder</span></h1>
+    <span class="muted" style="font-weight:700">Answers you can check and re-run</span>
+  </header>
+
+  <main id="app"></main>
+
+  <div class="notes">
+    <h3>What this mockup is testing</h3>
+    <ul>
+      <li>Only the choices that change the answer are asked. Everything else is fixed by fixed code and listed under "What we fixed automatically".</li>
+      <li>Each choice starts as a suggestion (dashed, yellow) and becomes yours only when you confirm it (solid, green).</li>
+      <li>Changing a choice updates the table numbers right away, so you can see what it does.</li>
+      <li>When the files can't answer the question, the page says so and drafts a note to the analyst.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const PULLS = {
+  full: {
+    files: [
+      ["📗", "customer_export.xlsx", "A list of 64,000 customers. The sheet has 3 title rows and a total row, which we skip."],
+      ["✉️", "email_sends.csv", "42,694 emails sent on 3 Mar 2008, in two versions: Men's and Women's."],
+      ["👣", "site_visits.csv", "9,394 site visits, 3 to 16 Mar 2008. One row per person who visited."],
+      ["🛒", "purchases.csv", "849 orders from 578 people, 3 to 16 Mar 2008."],
+    ],
+    people: 64000, emailed: 42694, mens: 21307, womens: 21387,
+  },
+  treated: {
+    files: [
+      ["📗", "customer_export.xlsx", "A list of 42,694 customers. The sheet has 3 title rows and a total row, which we skip."],
+      ["✉️", "email_sends.csv", "42,694 emails sent on 3 Mar 2008, in two versions: Men's and Women's."],
+      ["👣", "site_visits.csv", "Site visits, 3 to 16 Mar 2008. One row per person who visited."],
+      ["🛒", "purchases.csv", "Orders, 3 to 16 Mar 2008."],
+    ],
+    people: 42694, emailed: 42694, mens: 21307, womens: 21387,
+  },
+};
+// Outcomes across all 64,000 customers, by how long after the send we count.
+const WINDOWS = { 14: { visited: 9394, bought: 578, spend: 67258.13, label: "3 to 16 Mar (14 days)" },
+                  7: { visited: 4687, bought: 366, spend: 37609.95, label: "3 to 9 Mar (7 days)" } };
+
+const CHOICES = [
+  { key: "who", q: "Who belongs in the table?",
+    opts: [
+      { v: "all", a: "Everyone in customer_export.xlsx: 64,000 people",
+        why: "It's the longest list, and every person in the other three files is in it." },
+      { v: "emailed", a: "Only people in email_sends.csv: 42,694 people", bad: true,
+        why: "This removes the 21,306 people who weren't emailed. Then there's no one to compare with, so the app can't tell whether the email made a difference." },
+    ] },
+  { key: "got", q: "Who got the campaign?",
+    opts: [
+      { v: "separate", a: "People in email_sends.csv got it, and the two versions stay separate",
+        why: "The other 21,306 people aren't in the email file, so we take them as not emailed. Keeping Men's and Women's apart lets you compare each one with no email." },
+      { v: "any", a: "People in email_sends.csv got it, with both versions counted as one",
+        why: "One group of 42,694 emailed people against 21,306 who weren't. You can't tell the two versions apart later." },
+    ] },
+  { key: "window", q: "Which visits and purchases count?",
+    opts: [
+      { v: "14", a: "From the send on 3 Mar to 16 Mar (14 days)",
+        why: "That's everything in the visits and purchases files." },
+      { v: "7", a: "From the send on 3 Mar to 9 Mar (7 days)",
+        why: "Only the first week. Later visits and purchases are left out." },
+    ] },
+  { key: "missing", q: "What about people who aren't in the visits or purchases files?",
+    opts: [
+      { v: "zero", a: "They didn't visit or buy: count them as no visit and $0",
+        why: "These files only list people who did something. 54,606 customers aren't in the visits file and 63,422 aren't in the purchases file." },
+      { v: "ask", a: "I'm not sure. Ask my analyst first", ask: true,
+        why: "The table waits until you know. We'll add the question to a note you can send." },
+    ] },
+];
+
+const fresh = () => ({ who: "all", got: "separate", window: "14", missing: "zero" });
+let state = { pull: "full", screen: "upload", picks: fresh(), status: {}, open: null, peek: false, question: "Did the March email get more people to buy?" };
+let lastNumbers = {};
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n.toLocaleString("en-US");
+const pct = (a, b, d = 1) => (100 * a / b).toFixed(d) + "%";
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const optOf = (c) => c.opts.find((o) => o.v === state.picks[c.key]);
+const isSuggested = (c) => state.picks[c.key] === c.opts[0].v;
+
+function numbers() {
+  const p = PULLS[state.pull], w = WINDOWS[state.picks.window];
+  const people = state.picks.who === "all" ? p.people : p.emailed;
+  const blocked = state.pull === "treated" || state.picks.who === "emailed";
+  const asking = state.picks.missing === "ask";
+  return { people, emailed: p.emailed, none: people - p.emailed, blocked, asking,
+           visited: blocked || asking ? null : w.visited, bought: blocked || asking ? null : w.bought,
+           spend: blocked || asking ? null : w.spend };
+}
+
+function tile(key, label, value, sub, dim) {
+  const changed = lastNumbers[key] !== undefined && lastNumbers[key] !== value;
+  lastNumbers[key] = value;
+  return `<div class="tile ${dim ? "dim" : ""} ${changed ? "changed" : ""}"><div class="k">${label}</div>
+    <div class="v">${value}</div><div class="s">${sub}</div></div>`;
+}
+
+function renderTiles() {
+  const n = numbers(), separate = state.picks.got === "separate";
+  const dash = "–";
+  const why = n.blocked ? "needs a comparison group" : "waiting on your analyst";
+  return `<div class="tiles">
+    ${tile("people", "People", fmt(n.people), "one row each")}
+    ${tile("emailed", "Got an email", pct(n.emailed, n.people, 0), separate ? `Men's ${fmt(PULLS[state.pull].mens)} · Women's ${fmt(PULLS[state.pull].womens)}` : `${fmt(n.emailed)}, either version`)}
+    ${tile("none", "No email", fmt(n.none), n.none ? "the comparison group" : "no one to compare with", n.none === 0)}
+    ${tile("visited", "Visited the site", n.visited === null ? dash : pct(n.visited, n.people), n.visited === null ? why : `${fmt(n.visited)} people`, n.visited === null)}
+    ${tile("bought", "Bought something", n.bought === null ? dash : pct(n.bought, n.people), n.bought === null ? why : `${fmt(n.bought)} people`, n.bought === null)}
+    ${tile("spend", "Spent per person", n.spend === null ? dash : "$" + (n.spend / n.people).toFixed(2), n.spend === null ? why : "including $0 for non-buyers", n.spend === null)}
+  </div>`;
+}
+
+const PEEK = [
+  ["218", "Women's", "Phone", "10", "yes", "yes", "$29.99"],
+  ["6", "Women's", "Phone", "6", "yes", "no", "$0.00"],
+  ["11", "Women's", "Phone", "7", "yes", "no", "$0.00"],
+  ["1", "Women's", "Phone", "10", "no", "no", "$0.00"],
+  ["2", "No email", "Web", "6", "no", "no", "$0.00"],
+];
+function renderPeek() {
+  if (!state.peek) return "";
+  const rows = PEEK.map((r) => state.picks.got === "any" ? [r[0], r[1] === "No email" ? "No email" : "Emailed", ...r.slice(2)] : r);
+  return `<div class="peek"><table><thead><tr><th>customer</th><th>email</th><th>channel</th><th>months since last order</th><th>visited</th><th>bought</th><th>spent</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderChoice(c, i) {
+  const o = optOf(c), st = state.status[c.key];
+  const cls = o.bad ? "bad" : o.ask ? "ask" : st ? "done" : "";
+  const pill = o.ask ? "Asking your analyst" : o.bad ? "Leaves no comparison" : st ? "✓ Confirmed by you"
+    : isSuggested(c) ? "Suggested" : "Not confirmed yet";
+  const open = state.open === c.key;
+  let body = `<p class="answer">${esc(o.a)}</p><p class="why">${esc(o.why)}</p>`;
+  if (open) {
+    body += `<div class="opts" role="radiogroup" aria-label="${esc(c.q)}">${c.opts.map((x, j) => `
+      <label class="opt ${x.v === state.picks[c.key] ? "on" : ""}">
+        <input type="radio" name="opt-${c.key}" id="opt-${c.key}-${x.v}" value="${x.v}" ${x.v === state.picks[c.key] ? "checked" : ""} data-pick="${c.key}">
+        <b>${esc(x.a)}${j === 0 ? " <span class='muted'>(suggested)</span>" : ""}</b><small>${esc(x.why)}</small></label>`).join("")}</div>
+      <div class="row"><button class="btn small" data-done="${c.key}">Use this answer</button></div>`;
+  } else {
+    body += `<div class="row">${st || o.ask || o.bad ? "" : `<button class="btn small" data-confirm="${c.key}">Confirm</button>`}
+      <button class="linkish" data-open="${c.key}">Change</button></div>`;
+  }
+  return `<div class="choice ${cls}"><div class="top"><p class="q">${i + 1}. ${esc(c.q)}</p><span class="pill">${pill}</span></div>${body}</div>`;
+}
+
+function analystNote() {
+  const asks = [];
+  if (state.pull === "treated" || state.picks.who === "emailed")
+    asks.push("Could you also send the customers who were held out of the 3 Mar 2008 email? Same columns as customer_export.xlsx, plus their site visits and purchases from 3 to 16 Mar. Without them I can't compare people who got the email with people who didn't.");
+  if (state.picks.missing === "ask" && state.pull === "full")
+    asks.push("Customers missing from site_visits.csv and purchases.csv: does that mean they didn't visit or buy between 3 and 16 Mar, or that their rows weren't included?");
+  if (!asks.length) return "";
+  const text = `Hi, thanks for the files from the March email campaign.\n\n${asks.map((a, i) => (asks.length > 1 ? `${i + 1}. ` : "") + a).join("\n\n")}\n\nThanks!`;
+  return `<div class="banner ask">✉️ A note for your analyst
+    <p>Copy this and send it however you usually would.</p>
+    <div class="letter" id="letter">${esc(text)}</div>
+    <div class="row"><button class="btn small soft" id="copy">Copy note</button><span id="copied" class="muted" aria-live="polite"></span></div></div>`;
+}
+
+const FIXES = [
+  ["Read the customer sheet in <code>customer_export.xlsx</code>. Skipped 3 title rows at the top and the “Total rows: 64000” line at the bottom.", "64,006 rows → 64,000"],
+  ["Customer IDs were written 4 ways (<code>C-00123</code>, <code>C00123</code>, <code>00123</code>, <code>123</code>). We matched them by their digits.", "every ID matched"],
+  ["Matched the email list to customers.", "42,694 of 42,694"],
+  ["Matched site visits to customers.", "9,394 of 9,394"],
+  ["Matched orders to customers.", "849 of 849"],
+  ["Added up orders per person: “bought” if any order, “spent” is the total. 218 people had more than one order.", "849 orders → 578 people"],
+  ["Read dates as year-month-day.", "all dates read"],
+];
+
+function render() {
+  const app = $("app"), p = PULLS[state.pull];
+  if (state.screen === "upload") {
+    lastNumbers = {};
+    app.innerHTML = `<section class="card">
+      <h2 class="title"><span class="ic">📂</span> Add the files your analyst sent</h2>
+      <p class="lead">Drop them all in at once. You don't need to say which is which.</p>
+      <label class="f" for="question">What do you want to find out? <span class="muted">(optional, helps us build the right table)</span></label>
+      <textarea id="question">${esc(state.question)}</textarea>
+      <div class="drop">${p.files.map(([i, n, d]) => `<div class="file"><span class="fi">${i}</span><b>${esc(n)}</b><span>${esc(d)}</span></div>`).join("")}</div>
+      <div class="row"><button class="btn" id="go">Put them together</button><span class="muted" style="font-weight:700">4 files ready</span></div>
+    </section>`;
+    $("question").oninput = (e) => { state.question = e.target.value; };
+    $("go").onclick = () => { state.screen = "table"; render(); window.scrollTo({ top: 0 }); };
+    return;
+  }
+
+  if (state.screen === "ready") {
+    app.innerHTML = `<section class="card">
+      <h2 class="title"><span class="ic g">✅</span> Your table is ready</h2>
+      <p class="lead">${fmt(numbers().people)} people, one row each. It's frozen now, so every answer below uses exactly this table.</p>
+      ${renderTiles()}
+      <p style="font-weight:900;margin:16px 0 0">You decided:</p>
+      <ul class="summary">${CHOICES.map((c) => `<li><b>${esc(c.q)}</b><br>${esc(optOf(c).a)}</li>`).join("")}</ul>
+      <div class="row"><button class="btn" id="next">Ask your question</button><button class="linkish" id="back">Go back and change something</button></div>
+      <p class="why" style="margin-top:12px">In the real app, the next screen starts with “${esc(state.question || "your question")}” and already knows who got the email.</p>
+    </section>`;
+    $("back").onclick = () => { state.screen = "table"; render(); };
+    $("next").onclick = () => { $("next").textContent = "That's the end of this mockup"; $("next").disabled = true; };
+    return;
+  }
+
+  const n = numbers();
+  const done = CHOICES.filter((c) => state.status[c.key]).length;
+  const waiting = CHOICES.filter((c) => !state.status[c.key] && !optOf(c).ask && isSuggested(c)).length;
+  const ready = !n.blocked && !n.asking && done === CHOICES.length;
+  let h = `<section class="card">
+    <h2 class="title"><span class="ic p">🧩</span> Here's your table</h2>
+    <p class="lead">We put the 4 files together. Check that these numbers look right to you.</p>
+    ${renderTiles()}
+    <button class="linkish" id="peek">${state.peek ? "Hide the rows" : "Peek at 5 rows"}</button>${renderPeek()}`;
+
+  if (state.pull === "treated") {
+    h += `<div class="banner bad">Everyone in these files got the email, so there's no one to compare with.
+      <p>To tell whether the email made a difference, you need customers who didn't get it. All 42,694 customers in customer_export.xlsx are also in email_sends.csv.</p></div>
+      ${analystNote()}
+      <p class="why">You could compare before and after 3 Mar instead, but that can't separate the email from anything else that happened that week.</p>`;
+  } else {
+    h += `<div class="choices-head"><h3>Your 4 choices</h3><span class="count">${done} of 4 confirmed</span></div>
+      <p class="why" style="margin:-4px 0 12px">These change the answer, so they're yours to make. We've suggested an answer for each.</p>
+      ${CHOICES.map(renderChoice).join("")}
+      ${n.blocked ? `<div class="banner bad">This table has no one who wasn't emailed.<p>Change choice 1 back, or ask your analyst for the people who were held out.</p></div>` : ""}
+      ${analystNote()}
+      <div class="row" style="margin-top:16px">
+        ${waiting ? `<button class="btn soft" id="all">Confirm ${waiting === 1 ? "the last suggestion" : `all ${waiting} suggestions`}</button>` : ""}
+        <button class="btn" id="use" ${ready ? "" : "disabled"}>Use this table</button>
+        ${ready ? "" : `<span class="muted" style="font-weight:700">${n.blocked ? "Needs people who weren't emailed" : n.asking ? "Waiting on your analyst" : `${CHOICES.length - done} still to confirm`}</span>`}
+      </div>`;
+  }
+  h += `<details class="fixes" id="fixes"><summary>What we fixed automatically (${FIXES.length}) <small>· all of it is in the script you can download</small></summary>
+    <ul class="fixlist">${FIXES.map(([t, c]) => `<li><span>${t}</span><span class="n">${c}</span></li>`).join("")}</ul></details>
+  </section>`;
+  const wasOpen = $("fixes") && $("fixes").open;
+  app.innerHTML = h;
+  if (wasOpen) $("fixes").open = true;
+  bind();
+}
+
+function bind() {
+  $("peek").onclick = () => { state.peek = !state.peek; render(); };
+  document.querySelectorAll("[data-confirm]").forEach((b) => b.onclick = () => { state.status[b.dataset.confirm] = true; render(); });
+  document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { state.open = b.dataset.open; render(); });
+  document.querySelectorAll("[data-pick]").forEach((r) => r.onchange = () => {
+    state.picks[r.dataset.pick] = r.value; delete state.status[r.dataset.pick]; render();
+    const el = document.getElementById(`opt-${r.dataset.pick}-${r.value}`); if (el) el.focus();
+  });
+  document.querySelectorAll("[data-done]").forEach((b) => b.onclick = () => {
+    const c = CHOICES.find((x) => x.key === b.dataset.done), o = optOf(c);
+    if (!o.ask && !o.bad) state.status[c.key] = true;
+    state.open = null; render();
+  });
+  if ($("all")) $("all").onclick = () => {
+    CHOICES.forEach((c) => { if (isSuggested(c) && !optOf(c).ask) state.status[c.key] = true; }); state.open = null; render();
+  };
+  if ($("use")) $("use").onclick = () => { state.screen = "ready"; render(); window.scrollTo({ top: 0 }); };
+  if ($("copy")) $("copy").onclick = () => {
+    const text = $("letter").textContent, done = () => { $("copied").textContent = "Copied"; };
+    const select = () => { const r = document.createRange(); r.selectNodeContents($("letter")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copied").textContent = "Selected. Press Ctrl+C or ⌘C to copy."; };
+    try { navigator.clipboard.writeText(text).then(done, select); } catch (e) { select(); }
+  };
+}
+
+function setPull(pull) {
+  state = { ...state, pull, screen: "upload", picks: fresh(), status: {}, open: null, peek: false };
+  $("sc-full").classList.toggle("on", pull === "full"); $("sc-full").setAttribute("aria-pressed", pull === "full");
+  $("sc-treated").classList.toggle("on", pull === "treated"); $("sc-treated").setAttribute("aria-pressed", pull === "treated");
+  render();
+}
+$("sc-full").onclick = () => setPull("full");
+$("sc-treated").onclick = () => setPull("treated");
+render();
+</script>
