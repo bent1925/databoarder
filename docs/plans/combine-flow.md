@@ -1,6 +1,7 @@
 # Plan: One-screen combine flow
 
-Status (2026-11-13): plan written, not started. Mockup approved:
+Status (2026-11-13): phase 1 (server) built on `combine-flow-server`; see "What phase 1 changed from this plan"
+at the end. Mockup approved:
 [../mockups/combine-flow.html](../mockups/combine-flow.html). Written against `main` at `0cc2608`. Line numbers
 may drift.
 
@@ -235,3 +236,21 @@ more automatic fixes in the same list.
 - Whether real pulls fit the four choices. Hillstrom was built to. A real pull is still the main missing input.
 - Size limits. The preview reruns the whole recipe on each change.
 - Deployment for real customer data. Still waiting on a decision (see `docs/STATUS.md`).
+
+## What phase 1 changed from this plan
+
+- **Suggestions come only from their own route.** `POST /api/sources` is unchanged; the screen calls
+  `/answers/suggest` with the question. That keeps uploads fast and lets the question shape the suggestions.
+- **No "everyone got it" answer yet.** `CampaignAnswer.kind` is `list` or `column`. When the files show that
+  everyone got the campaign, the table is blocked with a note for the analyst. Building a before/after table
+  from these files needs a different shape (one row per day) and is left for later.
+- **Some risks block instead of becoming a choice.** IDs that differ only by letters (`A-123`, `B-123`) and people
+  listed twice on the campaign list stop the table, with a note for the analyst. Merging different people isn't
+  a choice that should be one click away.
+- **A window longer than the data covers is refused** by the server, not only left out of the options.
+- **`run_steps()` can start from tables already read,** and the window step can start every row on one date. Both
+  are small additions to `app/recipe_ops.py`, and old recipes run exactly as before.
+- **Speed:** a preview takes about 0.4 s on the 64,000-person Hillstrom pull. The first suggestion takes about
+  6 s, mostly reading the Excel file twice (once to find the header row, once to read it). That double read
+  already happens in the current builder.
+
