@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, field_validator
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, field_validator, model_validator
 
 
 class ABTestSpec(BaseModel):
@@ -375,7 +375,8 @@ class CountWithinWindow(_RecipeStep):
     op: Literal["count_within_window"] = "count_within_window"
     table: str
     key: str
-    start_column: str
+    start_column: Optional[str] = Field(default=None, description="Column holding each row's start date. "
+                                        "Leave it out to start every row on default_start")
     default_start: Optional[str] = Field(default=None, description="Start date for rows without one, "
                                          "such as the campaign date for people who weren't sent anything")
     events: str
@@ -385,6 +386,12 @@ class CountWithinWindow(_RecipeStep):
     measures: list[WindowMeasure] = Field(min_length=1)
     no_events_value: str = Field(description="Value for a row with no events in its window")
     date_order: Optional[Literal["day_first", "month_first"]] = None
+
+    @model_validator(mode="after")
+    def _needs_a_start(self):
+        if not self.start_column and not self.default_start:
+            raise ValueError("Each row needs a start date: give start_column, default_start, or both.")
+        return self
 
 
 RecipeStep = Annotated[
@@ -399,3 +406,79 @@ class DataRecipe(BaseModel):
     model_config = ConfigDict(extra="forbid")
     steps: list[RecipeStep] = Field(min_length=1)
     output: str = Field(description="Name of the table that becomes the analysis table")
+
+
+# ------------------------------------------------------------------ the one-screen combine flow
+
+class _Answer(BaseModel):
+    """One answer about how to build the table. It starts as a suggestion and counts only once the person confirms it."""
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["suggested", "confirmed"] = "suggested"
+    by: Literal["code", "ai", "person"] = "code"
+
+
+class PeopleAnswer(_Answer):
+    """Which table lists the people, one row each, and which column holds their ID."""
+    table: str
+    id_column: str
+
+
+class CampaignAnswer(_Answer):
+    """How we know who got the campaign.
+
+    list: being in another table (such as an email list) means they got it; everyone else didn't.
+    column: a column in the people table says who got it."""
+    kind: Literal["list", "column"]
+    table: Optional[str] = Field(default=None, description="list: the table of people who got it")
+    id_column: Optional[str] = Field(default=None, description="list: the ID column in that table")
+    versions_column: Optional[str] = Field(default=None, description="list: a column naming the version each got. "
+                                           "column: the people-table column saying who got it")
+    versions: Literal["separate", "any"] = "separate"
+    none_label: str = Field(default="Not sent", description="list: the label for people who didn't get it")
+    date_column: Optional[str] = Field(default=None, description="list: the column holding each person's send date")
+
+
+class WindowAnswer(_Answer):
+    """Which events count: from each person's start through `days` calendar days, counting the start day."""
+    start_date: str = Field(description="The campaign date. People without their own send date start on it")
+    days: int = Field(ge=1)
+    date_order: Optional[Literal["day_first", "month_first"]] = Field(
+        default=None, description="Only needed when dates are written like 03/04/2024")
+
+
+class MissingAnswer(_Answer):
+    """What it means when someone isn't in an events file."""
+    means: Literal["none", "ask"] = Field(description="none: they had no such events (0). ask: ask the analyst first")
+
+
+class MatchAnswer(_Answer):
+    """Only asked when many rows in another file match no one in the people table."""
+    action: Literal["leave_out", "ask"]
+
+
+class ReturnsAnswer(_Answer):
+    """Only asked when an amount being totalled has negative values, such as refunds."""
+    action: Literal["count", "leave_out"] = Field(description="count: they reduce the total. leave_out: ignore them")
+
+
+class EventsTable(BaseModel):
+    """Read from an events file by code: what to measure for each person. Not one of the person's choices."""
+    model_config = ConfigDict(extra="forbid")
+    table: str
+    id_column: str
+    date_column: Optional[str] = None
+    any_into: str
+    totals: dict[str, str] = Field(default_factory=dict, description="Number column -> name of its total")
+
+
+class TableAnswers(BaseModel):
+    """Everything needed to build the analysis table. Fixed code turns it into a DataRecipe."""
+    model_config = ConfigDict(extra="forbid")
+    people: PeopleAnswer
+    campaign: CampaignAnswer
+    window: WindowAnswer
+    missing: MissingAnswer
+    events: list[EventsTable] = Field(default_factory=list)
+    match: Optional[MatchAnswer] = None
+    returns: Optional[ReturnsAnswer] = None
+    id_rule: Literal["digits_only", "lowercase"] = "digits_only"

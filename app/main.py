@@ -14,10 +14,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
+from . import combine
 from .analysis import analyze
 from .ingest import (FROZEN_NAME, openpyxl_version, build_table, inspect_files, preview_recipe, read_frozen, require_comparison,
                      require_one_row_per_unit, require_time_span, script_block, suggest_read_steps)
-from .schemas import AnySpec, DataRecipe, Mode
+from .schemas import AnySpec, DataRecipe, Mode, TableAnswers
 from .observational import covariate_candidates
 from .prep import prepare
 from .proposer import ProposalError, propose
@@ -64,6 +65,15 @@ class ConfirmBody(BaseModel):
     unit_column: str
     group_column: Optional[str] = None
     time_column: Optional[str] = None
+
+
+class SuggestBody(BaseModel):
+    question: str = ""
+
+
+class AnswersBody(BaseModel):
+    answers: dict
+    question: str = ""
 
 
 def _confirmed(source: Optional[dict]) -> Optional[dict]:
@@ -179,17 +189,22 @@ def propose_steps(source_id: str, body: ProposeBody):
 @app.post("/api/sources/{source_id}/confirm")
 def confirm_source(source_id: str, body: ConfirmBody):
     """Freezes the table from a fully confirmed recipe, then sends it down the normal upload path."""
-    recipe = _recipe(body.recipe)
+    return _freeze(source_id, _recipe(body.recipe), body.unit_column, body.group_column, body.time_column)
+
+
+def _freeze(source_id: str, recipe: DataRecipe, unit_column: str, group_column: Optional[str],
+            time_column: Optional[str], extra: Optional[dict] = None, decided: Optional[list[str]] = None) -> dict:
+    """Builds a fully confirmed recipe, checks and freezes the table, and sends it down the normal upload path."""
     try:
         folder = SOURCES.folder(source_id)
         built = build_table(recipe, folder)
 
         def check(table: pd.DataFrame) -> None:
-            require_one_row_per_unit(table, body.unit_column)
-            if body.group_column:
-                require_comparison(table, body.group_column)
-            elif body.time_column:
-                require_time_span(table, body.time_column)
+            require_one_row_per_unit(table, unit_column)
+            if group_column:
+                require_comparison(table, group_column)
+            elif time_column:
+                require_time_span(table, time_column)
             else:
                 raise RecipeError("Choose a column that says who got the campaign, or a date column for before and after.")
 
@@ -201,14 +216,65 @@ def confirm_source(source_id: str, body: ConfirmBody):
         raise HTTPException(413, "The finished table is larger than 25 MB. Roll it up or keep fewer columns.")
     source = {"kind": "recipe", "inputs": built.inputs, "recipe": recipe.model_dump(), "table_sha256": built.sha256,
               "table_file": built.name, "read_options": built.read_options, "versions": {"openpyxl": openpyxl_version()},
-              "unit_column": body.unit_column, "group_column": body.group_column, "time_column": body.time_column,
-              "steps": [{key: entry[key] for key in ("text", "rows_before", "rows_after", "note")} for entry in built.log]}
-    script = script_block(recipe, built.name, built.inputs, built.sha256)
+              "unit_column": unit_column, "group_column": group_column, "time_column": time_column,
+              "steps": [{key: entry[key] for key in ("text", "rows_before", "rows_after", "note")} for entry in built.log],
+              **(extra or {})}
+    script = script_block(recipe, built.name, built.inputs, built.sha256, decided)
     result = _ingest(built.csv_bytes, built.name, source, script, df=table, check=check)
     path = SOURCES.snapshot_path(source_id, result["dataset_id"])
     path.write_bytes(built.csv_bytes)
     DATASETS[result["dataset_id"]]["snapshot_path"] = path
     return result
+
+
+def _answers(raw: dict) -> TableAnswers:
+    try:
+        return TableAnswers.model_validate(raw)
+    except ValidationError as problem:
+        first = problem.errors()[0]
+        name = next((str(part) for part in reversed(first["loc"]) if isinstance(part, str)), "an answer")
+        raise HTTPException(400, f"'{name}' needs a valid value.")
+
+
+@app.post("/api/sources/{source_id}/answers/suggest")
+def suggest_answers(source_id: str, body: SuggestBody):
+    """Suggested answers to the few choices that change the table. Every one comes back as a suggestion."""
+    try:
+        return combine.suggest(SOURCES.paths(source_id), body.question)
+    except RecipeError as problem:
+        raise HTTPException(400, str(problem))
+
+
+@app.post("/api/sources/{source_id}/answers/preview")
+def preview_answers(source_id: str, body: AnswersBody):
+    """What the answers would give, confirmed or not: numbers, a few rows, every fix, and anything blocking."""
+    try:
+        return combine.preview(_answers(body.answers), SOURCES.paths(source_id))
+    except RecipeError as problem:
+        raise HTTPException(400, str(problem))
+
+
+@app.post("/api/sources/{source_id}/answers/confirm")
+def confirm_answers(source_id: str, body: AnswersBody):
+    """Builds and freezes the table, but only once every needed answer is confirmed and nothing is blocking."""
+    answers = _answers(body.answers)
+    try:
+        paths = SOURCES.paths(source_id)
+        read_steps, tables = combine.read_files(paths)
+        checked = combine.review(answers, tables)
+        if checked["blocked"]:
+            raise HTTPException(400, checked["blocked"][0])
+        if checked["waiting"]:
+            names = ", ".join(checked["waiting"])
+            raise HTTPException(400, f"Please confirm every choice before using the table. Still to confirm: {names}.")
+        recipe = combine.compile_recipe(answers, read_steps, tables, confirmed=True)
+        group = combine.group_column(answers, recipe)
+    except RecipeError as problem:
+        raise HTTPException(400, str(problem))
+    decided = combine.decisions(answers)
+    extra = {"answers": answers.model_dump(), "decisions": decided, "question": body.question[:1000]}
+    unit = recipe.steps[[step.op for step in recipe.steps].index("clean_key")].into
+    return _freeze(source_id, recipe, unit, group, None, extra, decided)
 
 
 @app.get("/api/datasets/{dataset_id}/snapshot")

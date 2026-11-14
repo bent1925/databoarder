@@ -344,7 +344,12 @@ def _count_within_window(step, tables, folder):
         raise RecipeError(f"'{step['key']}' repeats in '{step['table']}' ({repeats:,} extra rows), so each row can't "
                           "have its own window. Roll that table up to one row per ID first.")
     order = step.get("date_order")
-    starts = _dates(_column(table, step["start_column"], step["table"]), step["start_column"], order)
+    if step.get("start_column"):
+        starts = _dates(_column(table, step["start_column"], step["table"]), step["start_column"], order)
+    elif step.get("default_start"):
+        starts = pd.Series(pd.NaT, index=table.index, dtype="datetime64[ns]")
+    else:
+        raise RecipeError("Each row needs a start date: choose a start date column, or one date for everyone.")
     if step.get("default_start"):
         starts = starts.fillna(_timestamp(step["default_start"], "The start date", order))
     no_start = starts.isna() & keys.notna()
@@ -393,9 +398,11 @@ OPERATIONS = {"read_table": _read_table, "choose_columns": _choose_columns, "sta
               "count_within_window": _count_within_window}
 
 
-def run_steps(recipe, folder):
-    """Carries out the steps in order. If one fails, the error says which, and holds the work so far."""
-    tables, log = {}, []
+def run_steps(recipe, folder, tables=None):
+    """Carries out the steps in order. If one fails, the error says which, and holds the work so far.
+
+    `tables` can hold tables already read, so a preview doesn't read the same files again."""
+    tables, log = dict(tables or {}), []
     for number, step in enumerate(recipe["steps"], 1):
         try:
             name, rows_before, note = OPERATIONS[step["op"]](step, tables, folder)

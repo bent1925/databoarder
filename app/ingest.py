@@ -145,11 +145,15 @@ def describe(step) -> str:
                 f"'{step.value_columns[-1]}' in '{step.table}' into rows, as '{step.into}', with their names in "
                 f"'{step.names_to}' and their values in '{step.values_to}'.")
     if kind == "count_within_window":
-        fallback = f", or {step.default_start} for rows without one," if step.default_start else ""
+        if step.start_column:
+            fallback = f", or {step.default_start} for rows without one," if step.default_start else ""
+            start = f"'{step.start_column}'{fallback}"
+        else:
+            start = f"{step.default_start} for every row"
         how = {"sum": "total of '{}'", "count_rows": "number of events", "any_event": "1 if any event, otherwise 0"}
         parts = [f"{m.into} ({how[m.how].format(m.column)})" for m in step.measures]
         return (f"For each row in '{step.table}', look at '{step.events}' rows with the same '{step.event_key}', "
-                f"dated by '{step.event_date}', from '{step.start_column}'{fallback} "
+                f"dated by '{step.event_date}', from {start} "
                 f"through {step.days} calendar day(s), counting the start day, to make "
                 f"{', '.join(parts)}. Rows with no events get {step.no_events_value}.{_order(step)}")
     return f"In '{step.table}', treat empty values of '{step.column}' as {step.value}."
@@ -304,15 +308,16 @@ def openpyxl_version() -> str:
 
 
 def script_block(recipe: DataRecipe, snapshot_name: str = FROZEN_NAME, inputs: Optional[list[dict]] = None,
-                 table_sha256: Optional[str] = None) -> str:
+                 table_sha256: Optional[str] = None, decisions: Optional[list[str]] = None) -> str:
     """A standalone section of Python that rebuilds the frozen table from the original files.
 
     With the recorded fingerprints, it stops instead of reporting numbers from different files or a different table."""
     dumped = recipe.model_dump()
     steps = "\n".join(f"# {number}. {_one_line(describe(step))}" for number, step in enumerate(recipe.steps, 1))
     checked = inputs is not None and table_sha256 is not None
+    decided = ("# You decided:\n" + "".join(f"#   - {_one_line(line)}\n" for line in decisions)) if decisions else ""
     return (f"# --- Building the analysis table from the original files ---\n"
-            f"# Run this script in a folder that holds the original files.\n"
+            f"# Run this script in a folder that holds the original files.\n{decided}"
             f"# Excel files were read with openpyxl {openpyxl_version()}.\n{steps}\n\n"
             f"{RUNTIME_SOURCE.read_text()}\n"
             + (f"{_FINGERPRINT_CHECKS}\n" if checked else "\n")
