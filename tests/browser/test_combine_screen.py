@@ -208,4 +208,17 @@ def test_choosing_the_date_order_updates_the_windows_on_offer(page, tmp_path):
     labels = window.locator("label.copt").all_inner_texts()
     assert any(label.startswith("34 days: 2024-03-01 to 2024-04-03") for label in labels)
     assert any(label.startswith("30 days") for label in labels)
+    # Codex's case: pick 34 days, then switch back to month-first, where only 4 days are covered.
+    window.locator("label.copt", has_text="34 days").click()
+    window.get_by_role("button", name="Use this answer").click()
+    page.wait_for_selector("#ctiles")
+    page.select_option("#c-order", "month_first")
+    page.wait_for_selector("[data-blocked]")
+    window.get_by_role("button", name="Change").click()
+    labels = window.locator("label.copt").all_inner_texts()
+    assert len(labels) == 1 and labels[0].startswith("4 days")
+    window.locator("label.copt").click()
+    window.get_by_role("button", name="Use this answer").click()
+    page.wait_for_selector("#ctiles")
+    assert "4 days" in window.inner_text()
 

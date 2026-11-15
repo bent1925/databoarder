@@ -806,8 +806,9 @@ function choiceHtml(ch, i) {
       <span>${esc(o.label)}</span><small>${esc(o.small)}</small></label>`).join("")}</div>
       <div class="row"><button class="btn small" data-cdone="${ch.key}">Use this answer</button></div>`;
   } else {
+    // Change stays available when the current answer is no longer on offer, even if only one option is left.
     body += `<div class="row">${done || asking ? "" : `<button class="btn small" data-cconfirm="${ch.key}">Confirm</button>`}
-      ${ch.opts.length > 1 ? `<button class="linkish" data-cchange="${ch.key}">Change</button>` : ""}</div>`;
+      ${ch.opts.length > 1 || !ch.opts.some((o) => o.on()) ? `<button class="linkish" data-cchange="${ch.key}">Change</button>` : ""}</div>`;
   }
   return `<div class="choice ${cls}" data-choice="${ch.key}"><div class="top"><p class="q">${i + 1}. ${esc(ch.q)}</p><span class="pill">${pill}</span></div>${body}</div>`;
 }
