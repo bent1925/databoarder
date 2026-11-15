@@ -1,6 +1,6 @@
 # Plan: Question recommender
 
-Status (2026-11-14): planned, not started. Written against `main` at `ff43144`. Line numbers may drift.
+Status (2026-11-14): phase 1 (labelled cases and harness) in review on `recommender-cases`. Written against `main` at `ff43144`. Line numbers may drift.
 
 ## The problem
 

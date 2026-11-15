@@ -9,8 +9,12 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6, both reviewed
   by Codex until clean). All 300 tests pass, including 7 browser tests.
-- **Next:** phase 3, AI suggestions for the combine screen's answers (see [plans/combine-flow.md](plans/combine-flow.md)).
-  It needs an API key for a real-model test; the code and offline tests don't.
+- **In review:** question recommender phase 1 (branch `recommender-cases`): labelled cases and the scoring
+  harness, no app change. Run `.venv/bin/python -m evals.recommender`. Today's suggestions (Baseline A) put a
+  well-fitting question in the top 3 for 40% of cases (36% with renamed columns), and never say "can't answer".
+  **Waiting on you:** review the labels in `evals/recommender_cases/` (about 70 goals).
+- **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
+  screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.
 
 ## The project in one paragraph
 
@@ -58,8 +62,8 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
 3. **Step 2:** a ready-to-forward note telling the analyst exactly what's missing from a pull.
 4. **Question recommender.** Planned 2026-11-14: [plans/recommender.md](plans/recommender.md). Ranks questions the
    data can answer by how well they fit the person's goal, built as a standard two-stage recommender (candidates,
-   hard feasibility filter, embedding retrieval, ranking, feedback logging, offline evaluation). Six PRs. Not
-   started; where it goes in this order isn't decided.
+   hard feasibility filter, embedding retrieval, ranking, feedback logging, offline evaluation). Six PRs.
+   **Phase 1 (cases and harness) in review, 2026-11-14.** Where the rest goes in this order isn't decided.
 
 ## Open question: why not just use Claude or ChatGPT?
 
@@ -95,6 +99,8 @@ connections, and monthly reruns with the same choices.
 
 - Run locally: `.venv/bin/python -m uvicorn app.main:app --reload`, then open http://localhost:8000. Messy test
   files are in `local_data/hillstrom/pull_full/`.
+- Python 3.15 also works (tested 2026-11-14), except Playwright: its `greenlet` dependency doesn't build on 3.15, so
+  install `requirements.txt` plus pytest and httpx, and the browser tests are skipped. Use 3.12 to run them.
 - Browser tests need Chromium once: `.venv/bin/python -m playwright install chromium`. Without it they're skipped.
 - Tests: `.venv/bin/python -m pytest` (install with `.venv/bin/pip install -r requirements-dev.txt`).
 - **On a new computer:** clone the repo, then `python3.12 -m venv .venv`, install `requirements-dev.txt`, and

@@ -1,0 +1,119 @@
+{
+  "date": "2026-11-14",
+  "commit": "7023171",
+  "datasets": [
+    "checkout_test",
+    "hillstrom",
+    "lalonde_cps",
+    "loyalty_program",
+    "regional_rollout",
+    "signup_page_change"
+  ],
+  "skipped": [],
+  "rankers": {
+    "baseline_a": {
+      "summary": {
+        "candidate_recall": 0.4642857142857143,
+        "recall@3": 0.4017857142857143,
+        "ndcg@5": 0.3468544412126392,
+        "mrr": 0.30505952380952384,
+        "cant_answer_right": 0.0,
+        "false_cant_answer": 0.0,
+        "cases": 700,
+        "answerable": 560,
+        "unanswerable": 140
+      },
+      "breakdown": {
+        "checkout_test": {
+          "candidate_recall": 0.7,
+          "recall@3": 0.7,
+          "ndcg@5": 0.5724344915552471,
+          "mrr": 0.48333333333333334,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 130,
+          "answerable": 100,
+          "unanswerable": 30
+        },
+        "hillstrom": {
+          "candidate_recall": 0.1,
+          "recall@3": 0.1,
+          "ndcg@5": 0.07138058616743151,
+          "mrr": 0.075,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 120,
+          "answerable": 100,
+          "unanswerable": 20
+        },
+        "lalonde_cps": {
+          "candidate_recall": 0.4444444444444444,
+          "recall@3": 0.05555555555555555,
+          "ndcg@5": 0.035051652976192074,
+          "mrr": 0.027777777777777776,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 110,
+          "answerable": 90,
+          "unanswerable": 20
+        },
+        "loyalty_program": {
+          "candidate_recall": 0.4444444444444444,
+          "recall@3": 0.4444444444444444,
+          "ndcg@5": 0.34869169350995627,
+          "mrr": 0.32407407407407407,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 110,
+          "answerable": 90,
+          "unanswerable": 20
+        },
+        "regional_rollout": {
+          "candidate_recall": 0.3333333333333333,
+          "recall@3": 0.3333333333333333,
+          "ndcg@5": 0.3449300530826343,
+          "mrr": 0.25925925925925924,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 110,
+          "answerable": 90,
+          "unanswerable": 20
+        },
+        "signup_page_change": {
+          "candidate_recall": 0.7777777777777778,
+          "recall@3": 0.7777777777777778,
+          "ndcg@5": 0.7141819260624405,
+          "mrr": 0.6666666666666666,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 120,
+          "answerable": 90,
+          "unanswerable": 30
+        },
+        "renamed columns": {
+          "candidate_recall": 0.4642857142857143,
+          "recall@3": 0.35714285714285715,
+          "ndcg@5": 0.3095120850997184,
+          "mrr": 0.26190476190476186,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 350,
+          "answerable": 280,
+          "unanswerable": 70
+        },
+        "original columns": {
+          "candidate_recall": 0.4642857142857143,
+          "recall@3": 0.44642857142857145,
+          "ndcg@5": 0.38419679732555995,
+          "mrr": 0.3482142857142857,
+          "cant_answer_right": 0.0,
+          "false_cant_answer": 0.0,
+          "cases": 350,
+          "answerable": 280,
+          "unanswerable": 70
+        }
+      },
+      "infeasible_shown": 0
+    }
+  }
+}
