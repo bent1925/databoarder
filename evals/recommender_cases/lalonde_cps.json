@@ -39,11 +39,12 @@
     {
       "id": "ll-find-work",
       "goal": "Did training help people find work?",
+      "unanswerable": "missing_outcome",
       "paraphrases": ["Are trainees more likely to be employed afterwards?", "employment after training",
                       "Did the program get people jobs?", "did trainng help ppl get hired"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
-         "why": "No employment column, but 1978 earnings (zero for people not working) is the measure the table has. A ranker should still put it first."}
+        {"grade": 1, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "No employment column. Average 1978 earnings is the closest question, but it can rise while the share of people working stays flat, so it isn't an answer to this goal."}
       ]
     },
     {

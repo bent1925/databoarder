@@ -9,6 +9,7 @@ Hillstrom's table isn't in git (local_data/). Without it, its cases are skipped 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -117,6 +118,14 @@ def worst(rows: list[dict], n: int) -> list[tuple[str, float, str]]:
     return [(gid, s, goal) for s, gid, goal in scored[:n]]
 
 
+def fingerprint(spec: dict, df) -> dict:
+    """What a saved score was computed from. The commit covers the code and case files; the table may not be in git
+    (Hillstrom's is in local_data/), so its bytes are fingerprinted the way the app fingerprints an upload."""
+    path = C.ROOT / spec["path"]
+    return {"dataset": spec["dataset"], "path": spec["path"], "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "rows": int(df.shape[0]), "columns": int(df.shape[1])}
+
+
 def git_commit() -> str:
     try:
         sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=C.ROOT, capture_output=True, text=True,
@@ -174,9 +183,9 @@ def main(argv=None) -> int:
         commit = git_commit()
         out = RESULTS / f"recommender-{date.today().isoformat()}-{commit}.json"
         out.write_text(json.dumps({"date": date.today().isoformat(), "commit": commit,
-                                   "datasets": [s["dataset"] for s, _, _ in loaded], "skipped": missing,
+                                   "datasets": [fingerprint(s, df) for s, df, _ in loaded], "skipped": missing,
                                    "rankers": _no_nan(results)}, indent=2) + "\n")
-        print(f"\nSaved {out.relative_to(C.ROOT)}")
+        print(f"\nSaved {out.relative_to(C.ROOT) if out.is_relative_to(C.ROOT) else out}")
     return 1 if failed else 0
 
 

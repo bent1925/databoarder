@@ -134,6 +134,19 @@ def test_rankers_never_show_anything_infeasible(name, loaded):
                     assert infeasible(table, s) is None, (spec["dataset"], goal["id"], s)
 
 
+def test_saved_result_fingerprints_each_table(tmp_path, monkeypatch, capsys):
+    """A score must be traceable to the exact table, including ones that aren't in git."""
+    import hashlib
+    import json
+    monkeypatch.setattr(run, "RESULTS", tmp_path)
+    assert run.main(["--dataset", "checkout_test"]) == 0
+    saved = json.loads(next(tmp_path.glob("recommender-*.json")).read_text())
+    [entry] = saved["datasets"]
+    raw = (C.ROOT / "sample_data" / "checkout_test.csv").read_bytes()
+    assert entry["dataset"] == "checkout_test" and entry["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert entry["rows"] == 6000
+
+
 def test_harness_runs_end_to_end(capsys):
     assert run.main(["--dataset", "checkout_test", "--no-save"]) == 0
     out = capsys.readouterr().out
