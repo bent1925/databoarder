@@ -99,8 +99,6 @@ connections, and monthly reruns with the same choices.
 
 - Run locally: `.venv/bin/python -m uvicorn app.main:app --reload`, then open http://localhost:8000. Messy test
   files are in `local_data/hillstrom/pull_full/`.
-- Python 3.15 also works (tested 2026-11-14), except Playwright: its `greenlet` dependency doesn't build on 3.15, so
-  install `requirements.txt` plus pytest and httpx, and the browser tests are skipped. Use 3.12 to run them.
 - Browser tests need Chromium once: `.venv/bin/python -m playwright install chromium`. Without it they're skipped.
 - Tests: `.venv/bin/python -m pytest` (install with `.venv/bin/pip install -r requirements-dev.txt`).
 - **On a new computer:** clone the repo, then `python3.12 -m venv .venv`, install `requirements-dev.txt`, and
