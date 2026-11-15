@@ -173,7 +173,7 @@ separate, later problem.
 - **Replaced:** the AI step proposer (`app/proposer.py`). It becomes an answer proposer, and
   `evals/recipe_cases.py` becomes `evals/answer_cases.py`.
 
-**Open question:** remove the builder entirely once a real pull shows whether anyone needs it. Keeping it
+**Decided (2026-11-14):** keep the builder, hidden behind the link. Revisit once a real pull shows whether anyone needs it. Keeping it
 costs maintenance, and it's the noisy screen this plan replaces.
 
 ## Statistical points to get right
@@ -259,4 +259,14 @@ more automatic fixes in the same list.
 - **Speed:** a preview takes about 0.4 s on the 64,000-person Hillstrom pull. The first suggestion takes about
   6 s, mostly reading the Excel file twice (once to find the header row, once to read it). That double read
   already happens in the current builder.
+
+## What phase 2 changed from this plan
+
+- **"Put them together first" opens the new screen.** The old builder is behind "Build it step by step instead",
+  and any files already added carry over to it.
+- **No separate "table ready" screen.** After "Use this table" the existing dataset view shows the confirmed
+  group, plus a collapsed "What you decided" list, and the typed question is pre-filled under "Something else…".
+- **Day/month order** appears inside the window choice only when dates are ambiguous.
+- **Browser tests drive Playwright directly,** without the pytest-playwright plugin, which would have downgraded
+  the pinned pytest.
 

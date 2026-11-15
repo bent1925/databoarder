@@ -246,9 +246,17 @@ def _events(tables: dict, found: dict, campaign_table: Optional[str], people_col
             notes.append(f"{name} was left out: it has no dates, so its rows can't be limited to the campaign window.")
             continue
         date_column = max(dated, key=lambda column: table[column].notna().sum())
-        totals = {column: _unique_name(f"total_{re.sub(r'[^0-9a-zA-Z]+', '_', column).strip('_').lower()}", taken)
-                  for column in table.columns
-                  if column not in (id_column, date_column) and _MONEY.search(column) and _is_number_column(table[column])}
+        totals = {}
+        for column in table.columns:
+            if column in (id_column, date_column) or not _MONEY.search(column) or not _is_number_column(table[column]):
+                continue
+            values = table[column].dropna().astype(str)
+            bad = values[pd.to_numeric(values, errors="coerce").isna()]
+            if len(bad):     # adding these up would fail, so say why the total isn't there
+                notes.append(f"'{column}' in {name} wasn't added up: {len(bad):,} values aren't numbers, such as "
+                             f"'{bad.iloc[0]}'. Ask your analyst for a file without them, or build the table step by step.")
+                continue
+            totals[column] = _unique_name(f"total_{re.sub(r'[^0-9a-zA-Z]+', '_', column).strip('_').lower()}", taken)
         events.append(EventsTable(table=name, id_column=id_column, date_column=date_column,
                                   any_into=_unique_name(f"any_{name}", taken), totals=totals))
     return events
@@ -423,11 +431,13 @@ def review(answers: TableAnswers, tables: dict) -> dict:
         sent = _recipe_dates(tables[campaign.table][campaign.date_column], campaign.date_column, order).dropna()
         if not sent.empty:
             latest = max(latest, sent.max().normalize())
+    shortest = None
     for events in answers.events:
         when = _recipe_dates(tables[events.table][events.date_column], events.date_column, order).dropna()
         if when.empty:
             continue
         covered = int((when.max().normalize() - latest).days) + 1
+        shortest = covered if shortest is None else min(shortest, covered)
         if answers.window.days > covered:
             blocked.append(f"{events.table} ends on {when.max():%Y-%m-%d}, so a {answers.window.days}-day window isn't "
                            f"complete for everyone and would undercount. Choose {max(covered, 1)} days or fewer, or ask "
@@ -455,7 +465,10 @@ def review(answers: TableAnswers, tables: dict) -> dict:
     if negative:
         needed.append("returns")
     waiting = [name for name in needed if getattr(answers, name) is None or getattr(answers, name).status != "confirmed"]
-    return {"blocked": blocked, "risks": risks, "info": info, "waiting": waiting, "needs": needed,
+    # The windows the data fully covers, with dates read as confirmed. Suggestions guessed the order, so this can differ.
+    window_days = (sorted({days for days in WINDOW_DAYS if days <= shortest} | {shortest})
+                   if shortest is not None and shortest >= 1 else [])
+    return {"blocked": blocked, "risks": risks, "info": info, "waiting": waiting, "needs": needed, "window_days": window_days,
             "note": analyst_note(asks) if asks else None, "ready": not blocked and not waiting}
 
 
@@ -568,6 +581,11 @@ def decisions(answers: TableAnswers) -> list[str]:
 
 # ------------------------------------------------------------------------------------------ previewing
 
+def _words(name: str) -> str:
+    """A file or column name as plain words: site_visits becomes site visits."""
+    return re.sub(r"[_\s]+", " ", str(name)).strip()
+
+
 def _numbers(final: pd.DataFrame, answers: TableAnswers, group: str) -> list[dict]:
     people = len(final)
     numbers = [{"key": "people", "label": "People", "value": f"{people:,}", "sub": "one row each"}]
@@ -579,11 +597,11 @@ def _numbers(final: pd.DataFrame, answers: TableAnswers, group: str) -> list[dic
                         "sub": f"{count:,} people"})
     for events in answers.events:
         any_events = pd.to_numeric(final[events.any_into], errors="coerce")
-        numbers.append({"key": events.any_into, "label": f"Any {events.table}", "value": f"{100 * any_events.mean():.1f}%",
+        numbers.append({"key": events.any_into, "label": f"Any {_words(events.table)}", "value": f"{100 * any_events.mean():.1f}%",
                         "sub": f"{int(any_events.sum()):,} people"})
         for column, into in events.totals.items():
             total = pd.to_numeric(final[into], errors="coerce")
-            numbers.append({"key": into, "label": f"{column} per person", "value": f"{total.mean():,.2f}",
+            numbers.append({"key": into, "label": f"Total {_words(column).lower()} per person", "value": f"{total.mean():,.2f}",
                             "sub": "including 0 for people with none"})
     return numbers
 

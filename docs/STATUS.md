@@ -3,13 +3,13 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-14
 
 ## Right now
 
-- **Branch:** `main`. Step 1 (the data stage) is fully merged (PRs #3 and #4). All 265 tests pass.
-- **Clicked through in a browser (2026-11-13).** It works, but combining files is the bottleneck: too many
-  options, too noisy for a nontechnical person. Next is a mockup of a simpler flow.
+- **Branch:** `combine-flow-screen`, open as PR #6 (phase 2 of the combine flow, the screen). Codex has
+  reviewed it four times; every finding is fixed (latest `73df603`). Next: one more `@codex review`, then merge.
+  300 tests pass.
 
 ## The project in one paragraph
 
@@ -35,8 +35,11 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
 
 1. **One-screen combine flow.** Mockup approved 2026-11-13: [mockups/combine-flow.html](mockups/combine-flow.html)
    (published privately at https://claude.ai/artifact/81LqwpTmSo4mA9E9W6YLAu). Building it, following [plans/combine-flow.md](plans/combine-flow.md) (three PRs: server, screen, AI).
-   **Phase 1 (server) done on `combine-flow-server`, in PR #5 (waiting on Codex review):** suggested answers, previews, blocking checks,
-   the analyst note, and building from confirmed answers. 285 tests pass. Next: fix review findings, merge, then phase 2 (screen).
+   **Phase 1 (server) merged to `main` (PR #5, reviewed by Codex, 2026-11-14):** suggested answers, previews, blocking checks,
+   the analyst note, and building from confirmed answers. 290 tests pass.
+   **Phase 2 (screen) in review as PR #6 (`combine-flow-screen`):** the new combine screen replaces what
+   "Put them together first" opens; the old builder is behind "Build it step by step instead". 7 Playwright browser
+   tests; 300 tests pass. Next: merge once Codex is clean, then phase 3 (AI suggestions).
    Decided 2026-11-13: keep "Confirm all suggestions" (the choices stay visible above it). Matching IDs by
    digits and adding up orders stay automatic, but become an extra choice when matching looks risky (people
    would merge, or many IDs don't match). The optional question asked before upload steers the suggestions and
@@ -69,12 +72,10 @@ connections, and monthly reruns with the same choices.
   per company, or running inside the customer's environment. Also shapes step 4.
 - **A real analyst pull,** to check size limits and whether the AI suggestions help.
 
-## Open, decide before phase 2
-
-- **The old step-by-step builder:** hide it behind a "Build it step by step instead" link (the plan's default)
-  or remove it. Deferred 2026-11-13.
-
 ## Decided
+
+- **The old step-by-step builder** stays, hidden behind a "Build it step by step instead" link, for pulls
+  the four choices can't describe. (Decided 2026-11-14.)
 
 - **People on more than one row:** a table can't be confirmed until it has one row per person. Clustered error
   estimates are on hold until a real pull needs them. (Recommended 2026-11-10; confirm if you disagree.)
@@ -89,4 +90,8 @@ connections, and monthly reruns with the same choices.
 
 - Run locally: `.venv/bin/python -m uvicorn app.main:app --reload`, then open http://localhost:8000. Messy test
   files are in `local_data/hillstrom/pull_full/`.
+- Browser tests need Chromium once: `.venv/bin/python -m playwright install chromium`. Without it they're skipped.
 - Tests: `.venv/bin/python -m pytest` (install with `.venv/bin/pip install -r requirements-dev.txt`).
+- **On a new computer:** clone the repo, then `python3.12 -m venv .venv`, install `requirements-dev.txt`, and
+  install Chromium as above. `local_data/` isn't in git: copy it over, or regenerate the messy pull with
+  `tools/make_messy_hillstrom.py` from the public Hillstrom CSV.
