@@ -5,6 +5,12 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 **Last updated:** 2026-11-14
 
+## How we work
+
+- **Keep [README.md](../README.md) up to date.** Whenever a change is merged to `main`, check whether the README
+  still describes the app correctly. If it doesn't, fix it in the same PR, or in a follow-up straight after.
+  (Asked for 2026-11-14, when the README had fallen behind.)
+
 ## Right now
 
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6, both reviewed
