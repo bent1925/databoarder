@@ -1,0 +1,156 @@
+{
+  "dataset": "hillstrom",
+  "path": "local_data/hillstrom/answer_key/analysis_table.csv",
+  "about": "The Hillstrom email test: customers randomly got a men's email, a women's email, or none. 'emailed' is 1 for either email. visit, conversion and spend are measured after the send.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben. The table is in local_data/, which isn't in git, so these cases only run where it has been copied over.",
+  "renames": {"emailed": "got_mail", "visit": "site_visit", "conversion": "ordered", "spend": "order_value",
+              "segment": "mail_version", "history": "prior_year_spend", "newbie": "first_year", "channel": "purchase_channel"},
+  "goals": [
+    {
+      "id": "hs-visits",
+      "goal": "Did the email campaign get people to visit the site?",
+      "paraphrases": ["Did emailed customers visit more?", "site visits, emailed vs not emailed",
+                      "Did the email drive traffic?", "did the emial get more ppl to the website"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "visit"},
+         "why": "Visit rate, emailed against not."},
+        {"grade": 1, "match": {"group_col": "segment", "levels": ["Mens E-Mail", "No E-Mail"], "outcome_col": "visit"},
+         "why": "One of the two emails against none."},
+        {"grade": 1, "match": {"group_col": "segment", "levels": ["Womens E-Mail", "No E-Mail"], "outcome_col": "visit"},
+         "why": "The other email against none."}
+      ]
+    },
+    {
+      "id": "hs-spend",
+      "goal": "Did emailed customers spend more?",
+      "paraphrases": ["Is spend higher for people who got the email?", "spend per customer, emailed vs holdout",
+                      "Did the campaign increase revenue per customer?", "emailed people spend more $?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "Spend, emailed against not."},
+        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
+         "why": "Buying rather than money."}
+      ]
+    },
+    {
+      "id": "hs-buy",
+      "goal": "Did the email make more people buy?",
+      "paraphrases": ["Is the conversion rate higher for emailed customers?", "purchase rate, email vs no email",
+                      "Did the campaign lift conversions?", "more ppl bought after getting the email?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
+         "why": "Conversion, emailed against not."},
+        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "Money rather than buying."}
+      ]
+    },
+    {
+      "id": "hs-mens-womens",
+      "goal": "Did the men's email get more visits than the women's email?",
+      "paraphrases": ["Which email drove more site visits, men's or women's?", "mens vs womens email, visit rate",
+                      "Was the women's version better at getting visits?", "did mens emial beat womens on visits"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "segment", "levels": ["Mens E-Mail", "Womens E-Mail"], "outcome_col": "visit"},
+         "why": "Visits, the two emails against each other."},
+        {"grade": 1, "match": {"group_col": "segment", "levels": ["Mens E-Mail", "Womens E-Mail"],
+                               "outcome_col": ["conversion", "spend"]},
+         "why": "The two emails, other results."}
+      ]
+    },
+    {
+      "id": "hs-womens",
+      "goal": "How did the women's email do against sending nothing?",
+      "paraphrases": ["Women's email vs no email", "Did the women's email beat the holdout?",
+                      "What did the womens version achieve compared with no email?", "womens email vs control, any good?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "segment", "levels": ["Womens E-Mail", "No E-Mail"],
+                               "outcome_col": ["visit", "conversion", "spend"]},
+         "why": "The women's email against none; the goal doesn't say which result, so any fits."}
+      ]
+    },
+    {
+      "id": "hs-worth",
+      "goal": "Was the email worth sending?",
+      "paraphrases": ["Did the campaign pay off?", "Should we send this email again?",
+                      "was the emial campaign worth it", "Is email a good use of budget?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "'Worth it' is usually money."},
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
+         "why": "Or whether more people bought."},
+        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "visit"},
+         "why": "Visits are a weaker reading."}
+      ]
+    },
+    {
+      "id": "hs-confirmed-sales",
+      "goal": "What did the campaign do to sales?",
+      "confirmed": {"group_col": "emailed"},
+      "paraphrases": ["How did the campaign affect sales?", "campaign impact on sales",
+                      "Did sales move because of the campaign?", "sales effect of the campain"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "Sales as money, using the group they confirmed."},
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
+         "why": "Sales as number of buyers."}
+      ]
+    },
+    {
+      "id": "hs-channel",
+      "goal": "Do web customers visit more than phone customers?",
+      "paraphrases": ["Visit rate for web vs phone customers", "Are phone customers less likely to visit the site?",
+                      "Do customers who buy online visit more?", "web vs phone ppl, who visits more"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "channel", "levels": ["Web", "Phone"], "outcome_col": "visit"},
+         "why": "Visits by channel, the two named."}
+      ]
+    },
+    {
+      "id": "hs-newbie",
+      "goal": "Do new customers buy more than returning customers?",
+      "paraphrases": ["Conversion for first-year customers vs older ones", "Are newer customers more likely to buy?",
+                      "new vs existing customers, purchase rate", "newbies buy more?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "newbie", "levels": ["0", "1"], "outcome_col": "conversion"},
+         "why": "Buying by whether they're new."},
+        {"grade": 1, "match": {"group_col": "newbie", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "Money rather than buying."}
+      ]
+    },
+    {
+      "id": "hs-random-spend",
+      "goal": "The emails were randomly assigned. Did they raise spend?",
+      "design": "random",
+      "paraphrases": ["It was a randomized test. Is spend higher for the emailed group?",
+                      "Random assignment: did email increase spending?", "randomized email test, spend lift?",
+                      "Since who got the email was random, did it make people spend more?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "Spend, emailed against not."},
+        {"grade": 1, "match": {"group_col": "segment", "levels": ["Mens E-Mail", "No E-Mail"], "outcome_col": "spend"},
+         "why": "One email against none."},
+        {"grade": 1, "match": {"group_col": "segment", "levels": ["Womens E-Mail", "No E-Mail"], "outcome_col": "spend"},
+         "why": "The other email against none."}
+      ]
+    },
+    {
+      "id": "hs-after-send",
+      "goal": "Did sales go up after the email went out?",
+      "unanswerable": "no_dates",
+      "paraphrases": ["Since the send, have sales risen?", "sales before vs after the email",
+                      "Did revenue jump after we sent it?", "sales after the emial went out, up?"],
+      "labels": [
+        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
+         "why": "This table has no dates, but emailed against not answers whether the email raised sales."}
+      ]
+    },
+    {
+      "id": "hs-unsubscribe",
+      "goal": "Did the email make people unsubscribe?",
+      "unanswerable": "missing_outcome",
+      "paraphrases": ["Did unsubscribes go up for emailed customers?", "unsubscribe rate from the campaign",
+                      "Did the email annoy people into opting out?", "did ppl unsubscibe because of the email"],
+      "labels": []
+    }
+  ]
+}

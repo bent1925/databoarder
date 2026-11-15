@@ -5,12 +5,22 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 **Last updated:** 2026-11-14
 
+## How we work
+
+- **Keep [README.md](../README.md) up to date.** Whenever a change is merged to `main`, check whether the README
+  still describes the app correctly. If it doesn't, fix it in the same PR, or in a follow-up straight after.
+  (Asked for 2026-11-14, when the README had fallen behind.)
+
 ## Right now
 
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6, both reviewed
   by Codex until clean). All 300 tests pass, including 7 browser tests.
-- **Next:** phase 3, AI suggestions for the combine screen's answers (see [plans/combine-flow.md](plans/combine-flow.md)).
-  It needs an API key for a real-model test; the code and offline tests don't.
+- **In review:** question recommender phase 1 (branch `recommender-cases`): labelled cases and the scoring
+  harness, no app change. Run `.venv/bin/python -m evals.recommender`. Today's suggestions (Baseline A) put a
+  well-fitting question in the top 3 for 41% of cases (36% with renamed columns), and never say "can't answer".
+  **Waiting on you:** review the labels in `evals/recommender_cases/` (about 70 goals).
+- **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
+  screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.
 
 ## The project in one paragraph
 
@@ -56,6 +66,10 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
    and `YYYYMMDD` dates. The `XX` one can silently count missing values as real data. These fit the
    "mechanical fixes" part of the new flow.
 3. **Step 2:** a ready-to-forward note telling the analyst exactly what's missing from a pull.
+4. **Question recommender.** Planned 2026-11-14: [plans/recommender.md](plans/recommender.md). Ranks questions the
+   data can answer by how well they fit the person's goal, built as a standard two-stage recommender (candidates,
+   hard feasibility filter, embedding retrieval, ranking, feedback logging, offline evaluation). Six PRs.
+   **Phase 1 (cases and harness) in review, 2026-11-14.** Where the rest goes in this order isn't decided.
 
 ## Open question: why not just use Claude or ChatGPT?
 
