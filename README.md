@@ -47,6 +47,12 @@ the public Hillstrom CSV. Tests that need it are skipped without it.
 Real-model checks, which call the API and cost money: `python -m evals.translator_cases` (typed questions become the
 right form) and `python -m evals.recipe_cases` (AI-suggested steps rebuild the right table; needs `local_data/`).
 
+Offline, free and the same every run: `python -m evals.recommender` scores the ready-made question suggestions against
+700 labelled cases (`evals/recommender_cases/`: example goals for each sample table, reworded, and rerun with the
+columns renamed). It reports how often a well-fitting question is in the top 3, and fails if anything the data can't
+support is shown. Each run is saved to `evals/results/` with the commit and a fingerprint of each table. This is
+phase 1 of a question recommender: [docs/plans/recommender.md](docs/plans/recommender.md).
+
 ## Design
 - The LLM only translates a question into one of four fixed forms (`ABTestSpec`, `BeforeAfterSpec`, `DiDSpec`,
   `ObservationalSpec` in app/schemas.py), via app/translator.py. It never computes. If its answer doesn't fit the
