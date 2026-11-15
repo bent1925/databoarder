@@ -4,6 +4,11 @@ Databoarder helps nontechnical people formulate questions and
 explicitly choose analyses. AI assists with clarification and
 planning; fixed code performs the analysis.
 
+## Working in this repo
+
+- At the start of each session, read [docs/STATUS.md](docs/STATUS.md) to see where things stand.
+- Keep it updated whenever work or plans change, so work can resume from any computer.
+
 ## Code Review Rules
 
 ### User control

@@ -7,9 +7,10 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 ## Right now
 
-- **Branch:** `combine-flow-screen`, open as PR #6 (phase 2 of the combine flow, the screen). Codex has
-  reviewed it four times; every finding is fixed (latest `73df603`). Next: one more `@codex review`, then merge.
-  300 tests pass.
+- **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6, both reviewed
+  by Codex until clean). All 300 tests pass, including 7 browser tests.
+- **Next:** phase 3, AI suggestions for the combine screen's answers (see [plans/combine-flow.md](plans/combine-flow.md)).
+  It needs an API key for a real-model test; the code and offline tests don't.
 
 ## The project in one paragraph
 
@@ -37,9 +38,9 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
    (published privately at https://claude.ai/artifact/81LqwpTmSo4mA9E9W6YLAu). Building it, following [plans/combine-flow.md](plans/combine-flow.md) (three PRs: server, screen, AI).
    **Phase 1 (server) merged to `main` (PR #5, reviewed by Codex, 2026-11-14):** suggested answers, previews, blocking checks,
    the analyst note, and building from confirmed answers. 290 tests pass.
-   **Phase 2 (screen) in review as PR #6 (`combine-flow-screen`):** the new combine screen replaces what
+   **Phase 2 (screen) merged to `main` (PR #6, reviewed by Codex, 2026-11-14):** the new combine screen replaces what
    "Put them together first" opens; the old builder is behind "Build it step by step instead". 7 Playwright browser
-   tests; 300 tests pass. Next: merge once Codex is clean, then phase 3 (AI suggestions).
+   tests; 300 tests pass. **Next: phase 3 (AI suggestions).**
    Decided 2026-11-13: keep "Confirm all suggestions" (the choices stay visible above it). Matching IDs by
    digits and adding up orders stay automatic, but become an extra choice when matching looks risky (people
    would merge, or many IDs don't match). The optional question asked before upload steers the suggestions and
