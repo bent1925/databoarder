@@ -1,27 +1,63 @@
 {
   "date": "2026-11-14",
-  "commit": "7023171",
+  "commit": "34841c1",
   "datasets": [
-    "checkout_test",
-    "hillstrom",
-    "lalonde_cps",
-    "loyalty_program",
-    "regional_rollout",
-    "signup_page_change"
+    {
+      "dataset": "checkout_test",
+      "path": "sample_data/checkout_test.csv",
+      "sha256": "1acf6c3f3baee2df565a5f4f7c2226800df153cc2e2e189eafe2d12be2f0e8ef",
+      "rows": 6000,
+      "columns": 7
+    },
+    {
+      "dataset": "hillstrom",
+      "path": "local_data/hillstrom/answer_key/analysis_table.csv",
+      "sha256": "210a1f2d3eae8f0351170763561bf533148387e7002c9a88bddc4c9743abb145",
+      "rows": 64000,
+      "columns": 14
+    },
+    {
+      "dataset": "lalonde_cps",
+      "path": "sample_data/lalonde_cps.csv",
+      "sha256": "ea3c137ce31342a90196f10479d0084b86df47dd21e0fd607d022d402c2090c3",
+      "rows": 16177,
+      "columns": 10
+    },
+    {
+      "dataset": "loyalty_program",
+      "path": "sample_data/loyalty_program.csv",
+      "sha256": "af3b180ed1499ed105698b8d1a0b3f6973ba4a402fa7bbafe79908137200130f",
+      "rows": 5000,
+      "columns": 8
+    },
+    {
+      "dataset": "regional_rollout",
+      "path": "sample_data/regional_rollout.csv",
+      "sha256": "f93ddcb15d56d23b0a3a07ebe60787b605cd4b5554c5754e462a95b8165bfbae",
+      "rows": 44742,
+      "columns": 5
+    },
+    {
+      "dataset": "signup_page_change",
+      "path": "sample_data/signup_page_change.csv",
+      "sha256": "375b0aaf2240feeadeae383a1b66389c7286c3b15c5267a962e7afdfdfb723ba",
+      "rows": 16370,
+      "columns": 5
+    }
   ],
   "skipped": [],
   "rankers": {
     "baseline_a": {
       "summary": {
-        "candidate_recall": 0.4642857142857143,
-        "recall@3": 0.4017857142857143,
-        "ndcg@5": 0.3468544412126392,
-        "mrr": 0.30505952380952384,
+        "candidate_recall": 0.4636363636363636,
+        "recall@3": 0.4090909090909091,
+        "ndcg@5": 0.35316088559832354,
+        "mrr": 0.3106060606060606,
         "cant_answer_right": 0.0,
         "false_cant_answer": 0.0,
         "cases": 700,
-        "answerable": 560,
-        "unanswerable": 140
+        "answerable": 550,
+        "unanswerable": 150
       },
       "breakdown": {
         "checkout_test": {
@@ -47,15 +83,15 @@
           "unanswerable": 20
         },
         "lalonde_cps": {
-          "candidate_recall": 0.4444444444444444,
-          "recall@3": 0.05555555555555555,
-          "ndcg@5": 0.035051652976192074,
-          "mrr": 0.027777777777777776,
+          "candidate_recall": 0.4375,
+          "recall@3": 0.0625,
+          "ndcg@5": 0.03943310959821609,
+          "mrr": 0.03125,
           "cant_answer_right": 0.0,
           "false_cant_answer": 0.0,
           "cases": 110,
-          "answerable": 90,
-          "unanswerable": 20
+          "answerable": 80,
+          "unanswerable": 30
         },
         "loyalty_program": {
           "candidate_recall": 0.4444444444444444,
@@ -91,26 +127,26 @@
           "unanswerable": 30
         },
         "renamed columns": {
-          "candidate_recall": 0.4642857142857143,
-          "recall@3": 0.35714285714285715,
-          "ndcg@5": 0.3095120850997184,
-          "mrr": 0.26190476190476186,
+          "candidate_recall": 0.45454545454545453,
+          "recall@3": 0.36363636363636365,
+          "ndcg@5": 0.3151395775560769,
+          "mrr": 0.26666666666666666,
           "cant_answer_right": 0.0,
           "false_cant_answer": 0.0,
           "cases": 350,
-          "answerable": 280,
-          "unanswerable": 70
+          "answerable": 275,
+          "unanswerable": 75
         },
         "original columns": {
-          "candidate_recall": 0.4642857142857143,
-          "recall@3": 0.44642857142857145,
-          "ndcg@5": 0.38419679732555995,
-          "mrr": 0.3482142857142857,
+          "candidate_recall": 0.4727272727272727,
+          "recall@3": 0.45454545454545453,
+          "ndcg@5": 0.39118219364057016,
+          "mrr": 0.35454545454545455,
           "cant_answer_right": 0.0,
           "false_cant_answer": 0.0,
           "cases": 350,
-          "answerable": 280,
-          "unanswerable": 70
+          "answerable": 275,
+          "unanswerable": 75
         }
       },
       "infeasible_shown": 0
