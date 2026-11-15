@@ -56,6 +56,10 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
    and `YYYYMMDD` dates. The `XX` one can silently count missing values as real data. These fit the
    "mechanical fixes" part of the new flow.
 3. **Step 2:** a ready-to-forward note telling the analyst exactly what's missing from a pull.
+4. **Question recommender.** Planned 2026-11-14: [plans/recommender.md](plans/recommender.md). Ranks questions the
+   data can answer by how well they fit the person's goal, built as a standard two-stage recommender (candidates,
+   hard feasibility filter, embedding retrieval, ranking, feedback logging, offline evaluation). Six PRs. Not
+   started; where it goes in this order isn't decided.
 
 ## Open question: why not just use Claude or ChatGPT?
 
