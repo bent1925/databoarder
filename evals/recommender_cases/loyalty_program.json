@@ -1,0 +1,129 @@
+{
+  "dataset": "loyalty_program",
+  "path": "sample_data/loyalty_program.csv",
+  "about": "Customers who chose whether to join a loyalty program. Past spend and age were measured before joining; spend in the next 90 days and renewal after.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "renames": {"joined_program": "program", "spend_next_90d": "rev_following_qtr", "past_spend": "rev_prior_year",
+              "renewed": "retained", "age": "cust_age", "region": "territory"},
+  "goals": [
+    {
+      "id": "ly-spend",
+      "goal": "Do loyalty members spend more in the next 90 days?",
+      "paraphrases": ["Is 90-day spend higher for program members?", "members vs non-members, spend over the next three months",
+                      "Do people in the loyalty program buy more afterwards?", "do loyalty memebers spend more next quarter"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "treated": "yes", "base": "no", "outcome_col": "spend_next_90d"},
+         "why": "Spend after joining, members against non-members."},
+        {"grade": 1, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
+         "why": "Right groups, other result."}
+      ]
+    },
+    {
+      "id": "ly-renew",
+      "goal": "Does joining make people renew?",
+      "paraphrases": ["Are members more likely to renew?", "renewal rate, members vs non-members",
+                      "Does the program improve renewals?", "do ppl who join renew more"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
+         "why": "Renewal by membership."}
+      ]
+    },
+    {
+      "id": "ly-worth",
+      "goal": "Is the loyalty program worth it?",
+      "paraphrases": ["Does the loyalty program pay off?", "Should we keep running the program?",
+                      "is loyalty worth the cost", "Is the program a good investment?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
+         "why": "'Worth it' is usually future spend."},
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
+         "why": "Or keeping customers. Both fit equally well."}
+      ]
+    },
+    {
+      "id": "ly-stick",
+      "goal": "Are members more likely to stick around?",
+      "design": "chose",
+      "paraphrases": ["Do members churn less?", "member retention vs non-member retention",
+                      "Is the program keeping customers longer?", "do members stay with us more"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
+         "why": "Renewal is the only measure of staying."}
+      ]
+    },
+    {
+      "id": "ly-region",
+      "goal": "Do customers in the East renew less than customers in the West?",
+      "paraphrases": ["Is renewal lower in the East region than the West?", "East vs West renewal rate",
+                      "Are Western customers more likely to renew than Eastern ones?", "east region renews less then west?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "region", "levels": ["East", "West"], "outcome_col": "renewed"},
+         "why": "Renewal by region, the two named."}
+      ]
+    },
+    {
+      "id": "ly-device",
+      "goal": "Do mobile customers spend less than desktop customers?",
+      "paraphrases": ["Is spend lower for people who shop on phones?", "spend by device",
+                      "Do desktop shoppers spend more?", "mobile customers spend less?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "spend_next_90d"},
+         "why": "Spend by device, using the most recent spend."},
+        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "past_spend"},
+         "why": "Also spend, from earlier."}
+      ]
+    },
+    {
+      "id": "ly-after-joining",
+      "goal": "After joining, do customers buy more?",
+      "paraphrases": ["Once people join, do they spend more?", "post-join spend for members vs others",
+                      "Does becoming a member increase purchases?", "do customers buy more after they sign up for loyalty"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
+         "why": "Spend after joining."}
+      ]
+    },
+    {
+      "id": "ly-who-joins",
+      "goal": "Were people who joined already big spenders before?",
+      "paraphrases": ["Did members spend more than non-members even before joining?", "past spend, members vs non-members",
+                      "Do the people who join already spend a lot?", "were joiners high spenders to begin with"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "past_spend"},
+         "why": "Spend before joining, by membership. Fine as a description of who joins, though not as an effect."}
+      ]
+    },
+    {
+      "id": "ly-quarter",
+      "goal": "What happens to next-quarter revenue when someone joins?",
+      "paraphrases": ["How does joining change revenue over the following quarter?", "member revenue in the next 90 days",
+                      "Does the program lift short-term revenue?", "next quarter revenu for people who join vs dont"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
+         "why": "Spend in the next 90 days is next-quarter revenue."}
+      ]
+    },
+    {
+      "id": "ly-since-launch",
+      "goal": "Did spending go up after we launched the program in March?",
+      "unanswerable": "no_dates",
+      "paraphrases": ["Since the program launched, are customers spending more?", "spend before vs after the program started",
+                      "Did revenue rise after the loyalty launch?", "spending since launch, up or down"],
+      "labels": [
+        {"grade": 1, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
+         "why": "No dates, but members against non-members is the nearest question."}
+      ]
+    },
+    {
+      "id": "ly-satisfied",
+      "goal": "Are loyalty members more satisfied?",
+      "unanswerable": "missing_outcome",
+      "paraphrases": ["Do members have higher NPS?", "Are members happier with us?",
+                      "member satisfaction vs non-members", "do members like us more"],
+      "labels": [
+        {"grade": 1, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
+         "why": "No satisfaction measure; renewing is the nearest sign of it."}
+      ]
+    }
+  ]
+}

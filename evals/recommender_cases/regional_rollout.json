@@ -1,0 +1,154 @@
+{
+  "dataset": "regional_rollout",
+  "path": "sample_data/regional_rollout.csv",
+  "about": "Daily visits in pilot and holdout cities, July to October 2026. The pilot cities got a change partway through; the holdout cities never did.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben. Note for review: a pilot-vs-holdout comparison that ignores dates is graded 1, not 2, when the goal is about the effect of the rollout, because it mixes the weeks before the pilot started with the weeks after. That is about answering the goal correctly, not about one design making a stronger claim.",
+  "renames": {"visit_date": "date", "city_group": "market_type", "signed_up": "registered", "pages_viewed": "page_depth",
+              "device": "platform"},
+  "goals": [
+    {
+      "id": "rr-pilot-aug30",
+      "goal": "Did the pilot cities sign up more than holdout cities after Aug 30?",
+      "paraphrases": ["After August 30, did signups rise more in pilot cities than in holdout cities?",
+                      "pilot vs holdout signups, before and after 8/30",
+                      "Compared with the holdout, did the pilot lift signups after Aug 30?",
+                      "did pilot citys get more sign ups than holdout after aug 30"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "treated": "pilot",
+                               "base": "holdout", "outcome_col": "signed_up"},
+         "why": "How the pilot-holdout gap in signups moved after the date."},
+        {"grade": 1, "match": {"analysis_type": ["ab_test", "observational"], "group_col": "city_group",
+                               "levels": ["pilot", "holdout"], "outcome_col": "signed_up"},
+         "why": "Compares the groups but ignores the date the goal names."}
+      ]
+    },
+    {
+      "id": "rr-pilot-work",
+      "goal": "Did the pilot work?",
+      "paraphrases": ["Was the regional pilot a success?", "Did the rollout do anything?",
+                      "is the pilot working", "Did the change in the pilot cities pay off?"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "signed_up"},
+         "why": "Signups are the main result; pilot against holdout, before and after."},
+        {"grade": 1, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "pages_viewed"},
+         "why": "Engagement is the secondary result."},
+        {"grade": 1, "match": {"analysis_type": ["ab_test", "observational"], "group_col": "city_group",
+                               "levels": ["pilot", "holdout"], "outcome_col": "signed_up"},
+         "why": "Right groups and result, but mixes weeks before the pilot with weeks after."}
+      ]
+    },
+    {
+      "id": "rr-pages",
+      "goal": "Once the rollout started, did people in pilot cities view more pages than people in holdout cities?",
+      "paraphrases": ["Did page views per visit rise more in the pilot than in the holdout after launch?",
+                      "pilot vs holdout page depth after the rollout",
+                      "Did the rollout make pilot-city visitors browse more, compared with the holdout?",
+                      "after launch, more pages viewed in pilot citys vs holdout?"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "pages_viewed"},
+         "why": "Pages viewed, pilot against holdout, before and after."},
+        {"grade": 1, "match": {"analysis_type": ["ab_test", "observational"], "group_col": "city_group",
+                               "levels": ["pilot", "holdout"], "outcome_col": "pages_viewed"},
+         "why": "Right groups and measure, but ignores when the rollout started."}
+      ]
+    },
+    {
+      "id": "rr-overall",
+      "goal": "Did signups go up overall after the rollout date?",
+      "paraphrases": ["Across all cities, are signups higher since the rollout?", "Total signup rate before vs after launch",
+                      "Did signups rise everywhere after the change date?", "overall sign ups after rollout, up or down"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "before_after", "outcome_col": "signed_up"},
+         "why": "Everyone together, before and after."},
+        {"grade": 1, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "outcome_col": "signed_up"},
+         "why": "Splits by group, which the goal didn't ask for."}
+      ]
+    },
+    {
+      "id": "rr-compare",
+      "goal": "How do pilot and holdout cities compare on signups?",
+      "paraphrases": ["Signup rate in pilot cities against holdout cities", "pilot vs holdout signups",
+                      "Are signups different between the two city groups?", "do pilot cities sign up more then holdout"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "city_group", "levels": ["pilot", "holdout"], "outcome_col": "signed_up"},
+         "why": "Any comparison of the two groups on signups fits a goal that doesn't mention timing."},
+        {"grade": 1, "match": {"group_col": "city_group", "levels": ["pilot", "holdout"], "outcome_col": "pages_viewed"},
+         "why": "Same groups, other measure."}
+      ]
+    },
+    {
+      "id": "rr-device",
+      "goal": "Do mobile visitors view fewer pages than desktop visitors?",
+      "paraphrases": ["Is page depth lower on phones?", "pages per visit, mobile vs desktop",
+                      "Do desktop users browse more pages?", "mobile people look at less pages?"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": ["ab_test", "observational"], "group_col": "device",
+                               "levels": ["mobile", "desktop"], "outcome_col": "pages_viewed"},
+         "why": "Pages viewed by device across the whole period."}
+      ]
+    },
+    {
+      "id": "rr-how-much",
+      "goal": "Compared with the holdout cities, how much did the rollout move signups?",
+      "design": "one_date_comparison",
+      "paraphrases": ["What's the signup lift from the rollout, using holdout cities as the baseline?",
+                      "How big was the rollout's effect on signups versus holdout?",
+                      "incremental signups from the rollout vs holdout", "how much more did pilot sign ups go up than holdout"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "treated": "pilot",
+                               "base": "holdout", "outcome_col": "signed_up"},
+         "why": "The signup effect, holdout as comparison."}
+      ]
+    },
+    {
+      "id": "rr-engaged",
+      "goal": "Is the rollout making people more engaged?",
+      "paraphrases": ["Did engagement rise in the pilot cities after the change?", "Is the rollout improving engagement?",
+                      "more engagment from the rollout?", "are pilot visitors more engaged now than holdout ones"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "pages_viewed"},
+         "why": "Pages viewed is the engagement measure."},
+        {"grade": 1, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "signed_up"},
+         "why": "Signing up is engagement of a kind."}
+      ]
+    },
+    {
+      "id": "rr-roll-out",
+      "goal": "Should we roll this out to every city?",
+      "paraphrases": ["Is the pilot good enough to launch everywhere?", "Go or no-go on a full rollout?",
+                      "should we expand the pilot nationally", "do we ship it to all citys"],
+      "labels": [
+        {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "signed_up"},
+         "why": "The decision rests on whether signups rose against the holdout."},
+        {"grade": 1, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "levels": ["pilot", "holdout"],
+                               "outcome_col": "pages_viewed"},
+         "why": "Engagement is a secondary input."}
+      ]
+    },
+    {
+      "id": "rr-revenue",
+      "goal": "Did the pilot increase revenue per visitor?",
+      "unanswerable": "missing_outcome",
+      "paraphrases": ["Are pilot cities making more money per visit?", "revenue lift from the pilot",
+                      "Did the rollout grow sales in pilot cities?", "more $ per visitor in the pilot?"],
+      "labels": [
+        {"grade": 1, "match": {"analysis_type": "diff_in_diff", "group_col": "city_group", "outcome_col": "signed_up"},
+         "why": "No money column; signups are the nearest measure."}
+      ]
+    },
+    {
+      "id": "rr-retention",
+      "goal": "Are people who signed up in pilot cities still active a month later?",
+      "unanswerable": "missing_outcome",
+      "paraphrases": ["Do pilot-city signups stick around?", "30-day retention of pilot signups",
+                      "Are new users from the pilot still using us after a month?", "do pilot sign ups churn less"],
+      "labels": []
+    }
+  ]
+}

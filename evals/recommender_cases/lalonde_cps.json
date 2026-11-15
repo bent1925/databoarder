@@ -1,0 +1,126 @@
+{
+  "dataset": "lalonde_cps",
+  "path": "sample_data/lalonde_cps.csv",
+  "about": "The LaLonde job-training data: trainees against a general survey sample. re74 and re75 are earnings before training, re78 after. People weren't randomly assigned in this version.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "renames": {"trained": "treat", "re78": "earn_1978", "re74": "earn_1974", "re75": "earn_1975", "educ": "school_years",
+              "marr": "married", "nodegree": "no_diploma"},
+  "goals": [
+    {
+      "id": "ll-earnings",
+      "goal": "Did the job training program raise earnings?",
+      "paraphrases": ["Do people who went through training earn more?", "earnings impact of the training",
+                      "Did training increase income?", "did the job trainng raise pay"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "trained", "treated": "1", "base": "0", "outcome_col": "re78"},
+         "why": "Earnings after training, trainees against others."}
+      ]
+    },
+    {
+      "id": "ll-1978",
+      "goal": "Do trainees earn more in 1978?",
+      "paraphrases": ["1978 earnings, trainees vs non-trainees", "Were trainees' 1978 incomes higher?",
+                      "Is pay in 1978 different for people who trained?", "trainees make more in 78?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "re78 is 1978 earnings."}
+      ]
+    },
+    {
+      "id": "ll-worth",
+      "goal": "Was the training worth the money?",
+      "paraphrases": ["Did the training pay off?", "Is the program worth funding again?",
+                      "was training a good investment", "Should we keep paying for job training?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "The payoff is later earnings."}
+      ]
+    },
+    {
+      "id": "ll-find-work",
+      "goal": "Did training help people find work?",
+      "unanswerable": "missing_outcome",
+      "paraphrases": ["Are trainees more likely to be employed afterwards?", "employment after training",
+                      "Did the program get people jobs?", "did trainng help ppl get hired"],
+      "labels": [
+        {"grade": 1, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "No employment column. Average 1978 earnings is the closest question, but it can rise while the share of people working stays flat, so it isn't an answer to this goal."}
+      ]
+    },
+    {
+      "id": "ll-chose",
+      "goal": "People signed up for training themselves. Are they earning more afterwards?",
+      "design": "chose",
+      "paraphrases": ["Trainees self-selected. Is their later income higher?",
+                      "Not randomized: do people who chose training earn more afterwards?",
+                      "Among volunteers for training, are later earnings higher?", "they picked training themselfs, earning more after?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "Later earnings, comparing similar people."}
+      ]
+    },
+    {
+      "id": "ll-schooling",
+      "goal": "Do trainees have less schooling than non-trainees?",
+      "paraphrases": ["Years of education, trainees vs others", "Are trainees less educated?",
+                      "Did people who trained have fewer years in school?", "do trainees have less educaton"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "educ"},
+         "why": "Education by training status, as a description of who trained."}
+      ]
+    },
+    {
+      "id": "ll-prior",
+      "goal": "Were trainees already earning less before the program?",
+      "paraphrases": ["Did trainees have lower earnings before training?", "pre-program earnings, trainees vs others",
+                      "Were people who trained poorer to begin with?", "trainees earned less before?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re75"},
+         "why": "1975 earnings, the year just before."},
+        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re74"},
+         "why": "1974 earnings are also before the program."}
+      ]
+    },
+    {
+      "id": "ll-degree",
+      "goal": "Do people without a degree earn less in 1978?",
+      "paraphrases": ["1978 earnings, with and without a high-school degree", "Is pay lower for people with no diploma?",
+                      "Does having a degree go with higher earnings?", "no degree = lower pay in 78?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "nodegree", "levels": ["0", "1"], "outcome_col": "re78"},
+         "why": "1978 earnings by degree."}
+      ]
+    },
+    {
+      "id": "ll-married",
+      "goal": "Do married people earn more?",
+      "paraphrases": ["Earnings for married vs unmarried people", "Is income higher for married people?",
+                      "Does marriage go with higher pay?", "married ppl make more money?"],
+      "labels": [
+        {"grade": 2, "match": {"group_col": "marr", "levels": ["0", "1"], "outcome_col": "re78"},
+         "why": "Most recent earnings by marriage."},
+        {"grade": 1, "match": {"group_col": "marr", "levels": ["0", "1"], "outcome_col": ["re74", "re75"]},
+         "why": "Earlier earnings by marriage."}
+      ]
+    },
+    {
+      "id": "ll-after-start",
+      "goal": "Did earnings go up after the program started in 1976?",
+      "unanswerable": "no_dates",
+      "paraphrases": ["Since the program began, have earnings risen?", "earnings before vs after the 1976 start",
+                      "Did incomes climb once training launched?", "pay since the program started, up?"],
+      "labels": [
+        {"grade": 1, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "Earnings years are columns, not dates, so trainees against others is the nearest question."}
+      ]
+    },
+    {
+      "id": "ll-health",
+      "goal": "Did training improve people's health?",
+      "unanswerable": "missing_outcome",
+      "paraphrases": ["Are trainees healthier?", "health outcomes after training",
+                      "Did the program improve wellbeing?", "trainees healthier afterwards?"],
+      "labels": []
+    }
+  ]
+}
