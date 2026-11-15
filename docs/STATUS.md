@@ -19,7 +19,7 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 - **Recommender baseline:** `.venv/bin/python -m evals.recommender`. Today's suggestions (Baseline A) put a
   well-fitting question in the top 3 for 41% of cases (36% with renamed columns), and never say "can't answer".
   **Waiting on you:** review the labels in `evals/recommender_cases/` (about 70 goals).
-- **In review:** PR #9, the README brought up to date with `main`.
+- **README** brought up to date with `main` (PR #9, merged 2026-11-14).
 - **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
   screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.
 
@@ -71,6 +71,10 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
    data can answer by how well they fit the person's goal, built as a standard two-stage recommender (candidates,
    hard feasibility filter, embedding retrieval, ranking, feedback logging, offline evaluation). Six PRs.
    **Phase 1 (cases and harness) merged to `main` (PR #8, reviewed by Codex), 2026-11-14.** Where the rest goes in this order isn't decided.
+   **Don't forget (Ben, 2026-11-14): kinds of question.** Effect of a change, prevalence from a sample,
+   forecasting, drivers. Not an up-front question yet; infer it from the goal and the table. Phase 2 adds a `task`
+   field to candidates; phase 4 adds a `different_task` "can't answer" reason and test cases. New kinds of analysis
+   only if real users ask. Details: [plans/recommender.md, "Kinds of question"](plans/recommender.md#kinds-of-question-noted-2026-11-14-for-later).
 
 ## Open question: why not just use Claude or ChatGPT?
 
@@ -100,7 +104,8 @@ connections, and monthly reruns with the same choices.
 
 - Step 3: save the analyst's query with the report.
 - Step 4: warehouse connections, once there's a pilot company.
-- Step 5: more kinds of analysis, chosen from what users ask.
+- Step 5: more kinds of analysis, chosen from what users ask. Candidates so far: prevalence from a sample, then
+  forecasting (see "Kinds of question" in [plans/recommender.md](plans/recommender.md)).
 
 ## Setup notes
 
