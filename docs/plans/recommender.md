@@ -181,17 +181,45 @@ before running, and how often it's run. These start at zero real traffic. The po
 
 1. **Labelled cases and harness.** Cases, labels, metrics, and Baseline A's score. No change to the app.
 2. **Candidates, filter, embeddings, Baseline B.** `app/recommend/`, a `/api/recommend` endpoint, scores for
-   Baseline B. The screen isn't changed yet.
+   Baseline B. The screen isn't changed yet. Give every candidate a `task` field (see "Kinds of question" below).
 3. **The screen.** The goal box and ranked list replace the suggestion list. Playwright tests. `suggest_questions()`
    stays as the fallback if the recommender errors.
 4. **"Can't answer" and redirects.** Uses the filter's rejection reasons. Links into the analyst note (STATUS.md,
-   step 2) when that exists.
+   step 2) when that exists. Includes the `different_task` reason and its cases (see "Kinds of question" below).
 5. **Logging and learned ranker.** The SQLite log, LambdaRank trained on the cases, and the comparison table. It
    becomes the default only if it beats Baseline B on the held-out datasets.
 6. **Optional AI re-ranking.** Compare against the learned ranker on quality, cost and speed.
 
 Later, once there's traffic: retrain from logged picks, correct for position bias, and occasionally swap positions
 2 and 3 to learn what people would have picked (exploration). Any randomness is seeded and logged.
+
+## Kinds of question (noted 2026-11-14, for later)
+
+Ben's idea: different kinds of data work ask different kinds of question, so knowing which kind someone is doing
+could guide the tool to the best question the data can answer. Examples:
+- **Effect of a change:** product analytics, an A/B test. This is the only kind the app answers today.
+- **Prevalence:** trust and safety, estimating how common something is from a reviewed sample.
+- **Forecasting:** what will happen next, sometimes with factors that must be interpretable.
+- **Drivers:** what goes with an outcome, as an interpretable model.
+
+**Decided for now:**
+- **Don't add an up-front question yet.** It should ask what the person is trying to do, in plain words, not what
+  kind of data scientist they are, because users are nontechnical. Today every engine answers "did a change make a
+  difference?", so the question would have only one real answer.
+- **Infer the kind before asking.** The goal text usually says it ("what will sales be next quarter?"), and so does
+  the table: dates with no groups look like a time series, and a reviewed-or-not column looks like a sample.
+  Ask only when it's unclear.
+
+**Cheap parts, in this plan's phases:**
+- **Phase 2:** every candidate carries a `task` field (`effect` for now), and so can labels. Adding a kind later
+  is then a new value, not a rebuild.
+- **Phase 4:** a `different_task` reason in `evals/recommender/cases.py`, and a few forecasting and prevalence
+  goals in the cases, so the recommender is scored on saying "that's a different kind of question" and what the
+  tool does cover, instead of offering a comparison.
+
+**Later, only if real users ask:** a new kind of analysis is roughly as big as everything built so far, with its
+own validity rules (sampling weights and design effects for prevalence; backtests and prediction intervals for
+forecasts). Prevalence from a sample fits the "answer you can defend" pitch best, so it's the likeliest first one.
 
 ## Open questions
 
