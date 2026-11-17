@@ -2,7 +2,7 @@
   "dataset": "checkout_test",
   "path": "sample_data/checkout_test.csv",
   "about": "A randomized test of a new checkout. One row per user; 'variant' says which checkout they saw.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-17.",
   "renames": {"variant": "checkout_version", "purchased": "converted", "revenue": "revenue_usd", "sessions": "visits",
               "device": "platform", "country": "market"},
   "goals": [
@@ -84,10 +84,11 @@
       "paraphrases": ["Is the purchase rate lower in Germany than in the US?", "DE vs US conversion",
                       "Are Germans less likely to buy than Americans?", "do german shoppers purchase less often then US ones"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "country", "levels": ["DE", "US"], "outcome_col": "purchased"},
-         "why": "Purchase rate by country, the two countries named."},
-        {"grade": 1, "match": {"group_col": "country", "levels": ["DE", "US"], "outcome_col": "revenue"},
-         "why": "Same countries, but money rather than buying."}
+        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased",
+                               "effect_by": "country"},
+         "why": "In an experiment, compare countries within each checkout: does the new checkout's effect on buying differ by country? (Ben, 2026-11-17.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "country", "levels": ["DE", "US"], "outcome_col": "purchased"},
+         "why": "Purchase rate by country, ignoring which checkout people saw."}
       ]
     },
     {
@@ -96,10 +97,11 @@
       "paraphrases": ["Do desktop users bring in more money than mobile users?", "revenue by device",
                       "Mobile vs desktop: who spends more?", "does mobile make less revenue then desktop"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "revenue"},
-         "why": "Revenue by device."},
-        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "purchased"},
-         "why": "Same split, but buying rather than money."}
+        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue",
+                               "effect_by": "device"},
+         "why": "Does the new checkout's effect on revenue differ between mobile and desktop? (Ben, 2026-11-17.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "revenue"},
+         "why": "Revenue by device, ignoring which checkout people saw."}
       ]
     },
     {
@@ -120,10 +122,11 @@
       "paraphrases": ["Does mobile convert worse than desktop?", "purchase rate on phones vs computers",
                       "Is buying lower on mobile?", "do ppl on mobile purchase less"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "purchased"},
-         "why": "Purchase rate by device."},
-        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "revenue"},
-         "why": "Same split, money rather than buying."}
+        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased",
+                               "effect_by": "device"},
+         "why": "Does the new checkout's effect on buying differ between mobile and desktop? (Ben, 2026-11-17.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "purchased"},
+         "why": "Purchase rate by device, ignoring which checkout people saw."}
       ]
     },
     {

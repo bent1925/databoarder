@@ -30,8 +30,8 @@ REASONS = {
                            "table says who got it, or everyone did.",
     "missing_outcome": "The result the goal asks about isn't measured in the table.",
 }
-MATCH_FIELDS = {"analysis_type", "outcome_col", "group_col", "date_col", "treated", "base", "levels"}
-COLUMN_FIELDS = ("outcome_col", "group_col", "date_col")
+MATCH_FIELDS = {"analysis_type", "outcome_col", "group_col", "date_col", "treated", "base", "levels", "effect_by"}
+COLUMN_FIELDS = ("outcome_col", "group_col", "date_col", "effect_by")
 ANALYSIS_TYPES = {"ab_test", "observational", "before_after", "diff_in_diff"}
 
 

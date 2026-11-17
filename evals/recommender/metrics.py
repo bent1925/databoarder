@@ -17,12 +17,17 @@ def key_of(spec: dict) -> dict:
     """The fields a label can match on, the same for every design.
 
     A/B and "they chose" questions call their levels control/treatment; date-with-comparison ones call them
-    comparison/treated. Labels use `treated` and `base` for both, or `levels` when the order doesn't matter."""
+    comparison/treated. Labels use `treated` and `base` for both, or `levels` when the order doesn't matter.
+
+    `effect_by` is a column the treatment effect is compared across (does the new checkout work differently by
+    country?). No question the app suggests has it yet, so labels that require it can't be matched: they record
+    an analysis people want that the app can't offer."""
     treated = spec.get("treatment") or spec.get("treated")
     base = spec.get("control") or spec.get("comparison")
     key = {"analysis_type": spec.get("analysis_type"), "outcome_col": spec.get("outcome_col"),
            "group_col": spec.get("group_col"), "date_col": spec.get("date_col"),
-           "treated": None if treated is None else str(treated), "base": None if base is None else str(base)}
+           "treated": None if treated is None else str(treated), "base": None if base is None else str(base),
+           "effect_by": spec.get("effect_by")}
     key["levels"] = frozenset((key["treated"], key["base"])) if treated is not None and base is not None else None
     return key
 
