@@ -2,7 +2,7 @@
   "dataset": "signup_page_change",
   "path": "sample_data/signup_page_change.csv",
   "about": "Visits to a signup page that changed partway through (July to October 2026). Everyone saw the same page on a given day; there is no comparison group.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-17.",
   "renames": {"visit_date": "day", "signed_up": "registered", "pages_viewed": "page_depth", "channel": "traffic_source",
               "device": "platform"},
   "goals": [
