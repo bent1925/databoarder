@@ -20,7 +20,8 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   well-fitting question in the top 3 for 41% of cases (36% with renamed columns), and never say "can't answer".
   **Waiting on you:** review the labels in `evals/recommender_cases/` (about 70 goals).
   **In progress (branch `review-checkout-labels`, not yet a PR):** reviewing them together in chat.
-  Done: `checkout_test`, `signup_page_change`, `regional_rollout`. Next: `loyalty_program`, `lalonde_cps`
+  Done: `checkout_test`, `signup_page_change`, `regional_rollout`. Applying the regional rules back to the earlier files: `checkout_test` done
+  (2026-11-18); `signup_page_change` S1–S12 and the LaLonde "should we" paraphrases still to regrade. Next: `loyalty_program`, `lalonde_cps`
   (points to resume from are in the chat: require the "compare similar people" method for the causal goals, and
   make "worth the money" can't-answer), `hillstrom`. Rules so far: near answers on a different measure, or that
   ignore the dates an effect question needs, get no credit; "should we...?" goals are can't-answer (`decision`).
