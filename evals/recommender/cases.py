@@ -29,6 +29,8 @@ REASONS = {
     "no_comparison_group": "The goal compares people who got the change with people who didn't, but nothing in the "
                            "table says who got it, or everyone did.",
     "missing_outcome": "The result the goal asks about isn't measured in the table.",
+    "decision": "The goal asks what to do (\"should we...?\"). Data can show what happened, but the choice also "
+                "depends on costs and priorities that aren't in the table.",
 }
 MATCH_FIELDS = {"analysis_type", "outcome_col", "group_col", "date_col", "treated", "base", "levels", "effect_by"}
 COLUMN_FIELDS = ("outcome_col", "group_col", "date_col", "effect_by")

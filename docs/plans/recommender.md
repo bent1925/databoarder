@@ -188,7 +188,7 @@ before running, and how often it's run. These start at zero real traffic. The po
 3. **The screen.** The goal box and ranked list replace the suggestion list. Playwright tests. `suggest_questions()`
    stays as the fallback if the recommender errors.
 4. **"Can't answer" and redirects.** Uses the filter's rejection reasons. Links into the analyst note (STATUS.md,
-   step 2) when that exists. Includes the `different_task` reason and its cases (see "Kinds of question" below).
+   step 2) when that exists. Includes the `decision` reason ("should we...?" goals, added 2026-11-18) and the `different_task` reason and its cases (see "Kinds of question" below).
 5. **Logging.** The SQLite log of what people pick, and the comparison table. The learned ranker waits until there
    are enough logged picks to train on. It's scored on the labelled cases and becomes the default only if it beats
    Baseline B.
