@@ -20,10 +20,11 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   well-fitting question in the top 3 for 41% of cases (36% with renamed columns), and never say "can't answer".
   **Waiting on you:** review the labels in `evals/recommender_cases/` (about 70 goals).
   **In progress (branch `review-checkout-labels`, not yet a PR):** reviewing them together in chat.
-  Done: `checkout_test`, `signup_page_change`, `regional_rollout`. The earlier files were regraded to the same rules on 2026-11-18. Next: `loyalty_program`, `lalonde_cps`
-  ("worth the money" is already can't-answer; still to decide: require the "compare similar people"
-  method for the causal goals), `hillstrom`. Rules so far: near answers on a different measure, or that
-  ignore the dates an effect question needs, get no credit; "should we...?" goals are can't-answer (`decision`).
+  Done: `checkout_test`, `signup_page_change`, `regional_rollout`, `loyalty_program`. Next: `lalonde_cps`,
+  `hillstrom`. Rules so far: near answers on a different measure, or that ignore the dates an effect question
+  needs, get no credit; "should we...?" goals are can't-answer (`decision`); "worth it" without costs is
+  can't-answer; when people chose the program, a goal about its effect needs the "compare similar people"
+  method, and a plain difference gets no credit.
 - **README** brought up to date with `main` (PR #9, merged 2026-11-14).
 - **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
   screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.
