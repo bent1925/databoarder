@@ -151,3 +151,11 @@ def test_harness_runs_end_to_end(capsys):
     assert run.main(["--dataset", "checkout_test", "--no-save"]) == 0
     out = capsys.readouterr().out
     assert "baseline_a" in out and "recall@3" in out and "renamed columns" in out
+
+
+def test_effect_by_labels_need_an_effect_by_question():
+    """A label for 'does the effect differ by country?' isn't met by a plain A/B comparison."""
+    labels = [{"grade": 2, "match": {"group_col": "variant", "outcome_col": "purchased", "effect_by": "device"}}]
+    assert grades([AB], labels) == [0]
+    assert grades([{**AB, "effect_by": "device"}], labels) == [2]
+    assert grades([{**AB, "effect_by": "country"}], labels) == [0]

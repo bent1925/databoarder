@@ -15,10 +15,16 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6), and question
   recommender phase 1 (PR #8, labelled cases and the scoring harness, no app change), all reviewed by Codex.
-  All 314 tests pass, including 7 browser tests.
-- **Recommender baseline:** `.venv/bin/python -m evals.recommender`. Today's suggestions (Baseline A) put a
-  well-fitting question in the top 3 for 41% of cases (36% with renamed columns), and never say "can't answer".
-  **Waiting on you:** review the labels in `evals/recommender_cases/` (about 70 goals).
+  All 315 tests pass, including 7 browser tests.
+- **Recommender baseline:** `.venv/bin/python -m evals.recommender`. Labels reviewed by Ben (2026-11-17 and 18,
+  branch `review-checkout-labels`). Against them, today's suggestions (Baseline A) put a well-fitting question in
+  the top 3 for 38% of cases (37% with renamed columns), and never say "can't answer". Weakest: LaLonde 6%,
+  Hillstrom 11%, loyalty 25%.
+  Rules from the review: near answers on a different measure, or that ignore the dates an effect question needs,
+  get no credit; "should we...?" goals are can't-answer (`decision`); "worth it" without costs is can't-answer;
+  when people chose the program, a goal about its effect needs the "compare similar people" method, and a plain
+  difference gets no credit; in an experiment, "do X customers do more than Y?" wants the effect compared across
+  X and Y (`effect_by`), which the app can't suggest yet. The labelled cases are a test, never training data.
 - **README** brought up to date with `main` (PR #9, merged 2026-11-14).
 - **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
   screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.

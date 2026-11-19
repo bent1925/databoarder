@@ -2,7 +2,7 @@
   "dataset": "hillstrom",
   "path": "local_data/hillstrom/answer_key/analysis_table.csv",
   "about": "The Hillstrom email test: customers randomly got a men's email, a women's email, or none. 'emailed' is 1 for either email. visit, conversion and spend are measured after the send.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben. The table is in local_data/, which isn't in git, so these cases only run where it has been copied over.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-18. The table is in local_data/, which isn't in git, so these cases only run where it has been copied over.",
   "renames": {"emailed": "got_mail", "visit": "site_visit", "conversion": "ordered", "spend": "order_value",
               "segment": "mail_version", "history": "prior_year_spend", "newbie": "first_year", "channel": "purchase_channel"},
   "goals": [
@@ -27,9 +27,7 @@
                       "Did the campaign increase revenue per customer?", "emailed people spend more $?"],
       "labels": [
         {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
-         "why": "Spend, emailed against not."},
-        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
-         "why": "Buying rather than money."}
+         "why": "Spend, emailed against not."}
       ]
     },
     {
@@ -39,9 +37,7 @@
                       "Did the campaign lift conversions?", "more ppl bought after getting the email?"],
       "labels": [
         {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
-         "why": "Conversion, emailed against not."},
-        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
-         "why": "Money rather than buying."}
+         "why": "Conversion, emailed against not."}
       ]
     },
     {
@@ -51,10 +47,7 @@
                       "Was the women's version better at getting visits?", "did mens emial beat womens on visits"],
       "labels": [
         {"grade": 2, "match": {"group_col": "segment", "levels": ["Mens E-Mail", "Womens E-Mail"], "outcome_col": "visit"},
-         "why": "Visits, the two emails against each other."},
-        {"grade": 1, "match": {"group_col": "segment", "levels": ["Mens E-Mail", "Womens E-Mail"],
-                               "outcome_col": ["conversion", "spend"]},
-         "why": "The two emails, other results."}
+         "why": "Visits, the two emails against each other."}
       ]
     },
     {
@@ -71,16 +64,11 @@
     {
       "id": "hs-worth",
       "goal": "Was the email worth sending?",
+      "unanswerable": "missing_outcome",
+      "note": "Worth it needs the campaign's cost, which isn't in the table (Ben, 2026-11-18).",
       "paraphrases": ["Did the campaign pay off?", "Should we send this email again?",
                       "was the emial campaign worth it", "Is email a good use of budget?"],
-      "labels": [
-        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
-         "why": "'Worth it' is usually money."},
-        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion"},
-         "why": "Or whether more people bought."},
-        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "visit"},
-         "why": "Visits are a weaker reading."}
-      ]
+      "labels": []
     },
     {
       "id": "hs-confirmed-sales",
@@ -101,8 +89,10 @@
       "paraphrases": ["Visit rate for web vs phone customers", "Are phone customers less likely to visit the site?",
                       "Do customers who buy online visit more?", "web vs phone ppl, who visits more"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "channel", "levels": ["Web", "Phone"], "outcome_col": "visit"},
-         "why": "Visits by channel, the two named."}
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "visit", "effect_by": "channel"},
+         "why": "In an experiment, compare channels within each arm: does the email's effect on visits differ by channel? (Ben, 2026-11-18.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "channel", "levels": ["Web", "Phone"], "outcome_col": "visit"},
+         "why": "Visits by channel, ignoring who got the email."}
       ]
     },
     {
@@ -111,10 +101,10 @@
       "paraphrases": ["Conversion for first-year customers vs older ones", "Are newer customers more likely to buy?",
                       "new vs existing customers, purchase rate", "newbies buy more?"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "newbie", "levels": ["0", "1"], "outcome_col": "conversion"},
-         "why": "Buying by whether they're new."},
-        {"grade": 1, "match": {"group_col": "newbie", "levels": ["0", "1"], "outcome_col": "spend"},
-         "why": "Money rather than buying."}
+        {"grade": 2, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "conversion", "effect_by": "newbie"},
+         "why": "Does the email's effect on buying differ between new and returning customers? (Ben, 2026-11-18.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "newbie", "levels": ["0", "1"], "outcome_col": "conversion"},
+         "why": "Buying by whether they're new, ignoring who got the email."}
       ]
     },
     {
@@ -139,10 +129,7 @@
       "unanswerable": "no_dates",
       "paraphrases": ["Since the send, have sales risen?", "sales before vs after the email",
                       "Did revenue jump after we sent it?", "sales after the emial went out, up?"],
-      "labels": [
-        {"grade": 1, "match": {"group_col": "emailed", "levels": ["0", "1"], "outcome_col": "spend"},
-         "why": "This table has no dates, but emailed against not answers whether the email raised sales."}
-      ]
+      "labels": []
     },
     {
       "id": "hs-unsubscribe",

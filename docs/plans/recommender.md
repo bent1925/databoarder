@@ -119,12 +119,14 @@ Not a feature: anything that rewards one design over another for being more conv
 Three rankers, built in order and compared on the same test cases:
 1. **Baseline A:** today's `suggest_questions()` order, so there's a "before" number.
 2. **Baseline B:** a hand-weighted sum of the features.
-3. **Learned ranker:** LightGBM's LambdaRank, trained on the labelled cases below. It's the standard
-   learning-to-rank method. It trains offline. The trained model file is committed with a version number, and the
-   same input always gives the same order.
+3. **Learned ranker:** LightGBM's LambdaRank, the standard learning-to-rank method, trained on what real people
+   pick once those picks are logged. **Not trained on the labelled cases below** (decided 2026-11-17): about 70 goals
+   on six tables is too few to learn from, and a model trained on them would mostly fit how they were worded. The
+   labelled cases stay a test. It trains offline. The trained model file is committed with a version number, and
+   the same input always gives the same order.
 
 Optional fourth (phase 6): the AI re-ranks the top 10 and writes the one-line reasons. Compare quality, cost and
-speed against the learned ranker before deciding whether to keep it.
+speed against the best ranker so far before deciding whether to keep it.
 
 ### 5. Feedback logging
 
@@ -154,9 +156,10 @@ A new `evals/recommender_cases/`, one file per dataset:
 - **Column renaming:** each dataset also appears with its columns renamed (`purchased` → `converted`, `spend` →
   `revenue_usd`), so the ranker can't just memorize column names.
 
-**Train/test split by dataset, not by case.** All paraphrases of one goal, and all goals on one dataset, stay on
-the same side. Otherwise the test score measures memory, not whether it generalizes to a new table. With 6 datasets,
-use leave-one-dataset-out: train on 5, test on 1, six times.
+**A test, not training data** (decided 2026-11-17). No model is trained on these cases. If anything is tuned
+against them (Baseline B's weights, a threshold), split by dataset, not by case: all paraphrases of one goal, and
+all goals on one dataset, stay on the same side, using leave-one-dataset-out (tune on 5, check on 1, six times).
+Otherwise the score measures memory, not whether it generalizes to a new table.
 
 ### Metrics
 
@@ -185,12 +188,13 @@ before running, and how often it's run. These start at zero real traffic. The po
 3. **The screen.** The goal box and ranked list replace the suggestion list. Playwright tests. `suggest_questions()`
    stays as the fallback if the recommender errors.
 4. **"Can't answer" and redirects.** Uses the filter's rejection reasons. Links into the analyst note (STATUS.md,
-   step 2) when that exists. Includes the `different_task` reason and its cases (see "Kinds of question" below).
-5. **Logging and learned ranker.** The SQLite log, LambdaRank trained on the cases, and the comparison table. It
-   becomes the default only if it beats Baseline B on the held-out datasets.
-6. **Optional AI re-ranking.** Compare against the learned ranker on quality, cost and speed.
+   step 2) when that exists. Includes the `decision` reason ("should we...?" goals, added 2026-11-18) and the `different_task` reason and its cases (see "Kinds of question" below).
+5. **Logging.** The SQLite log of what people pick, and the comparison table. The learned ranker waits until there
+   are enough logged picks to train on. It's scored on the labelled cases and becomes the default only if it beats
+   Baseline B.
+6. **Optional AI re-ranking.** Compare against the best ranker so far on quality, cost and speed.
 
-Later, once there's traffic: retrain from logged picks, correct for position bias, and occasionally swap positions
+Later, once there's traffic: train the learned ranker from logged picks, correct for position bias, and occasionally swap positions
 2 and 3 to learn what people would have picked (exploration). Any randomness is seeded and logged.
 
 ## Kinds of question (noted 2026-11-14, for later)

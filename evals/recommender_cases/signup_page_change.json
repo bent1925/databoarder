@@ -2,7 +2,7 @@
   "dataset": "signup_page_change",
   "path": "sample_data/signup_page_change.csv",
   "about": "Visits to a signup page that changed partway through (July to October 2026). Everyone saw the same page on a given day; there is no comparison group.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-17 and regraded 2026-11-18: no credit for a near answer on a different measure.",
   "renames": {"visit_date": "day", "signed_up": "registered", "pages_viewed": "page_depth", "channel": "traffic_source",
               "device": "platform"},
   "goals": [
@@ -13,9 +13,7 @@
                       "Did more visitors register after the end of August?", "did sign ups go up after aug 30"],
       "labels": [
         {"grade": 2, "match": {"analysis_type": "before_after", "outcome_col": "signed_up"},
-         "why": "Signup rate before and after a date."},
-        {"grade": 1, "match": {"analysis_type": "before_after", "outcome_col": "pages_viewed"},
-         "why": "Same date question, wrong measure."}
+         "why": "Signup rate before and after a date."}
       ]
     },
     {
@@ -25,9 +23,7 @@
                       "did the page refresh do anything", "Did our new landing page improve things?"],
       "labels": [
         {"grade": 2, "match": {"analysis_type": "before_after", "outcome_col": "signed_up"},
-         "why": "A signup page works if more people sign up."},
-        {"grade": 1, "match": {"analysis_type": "before_after", "outcome_col": "pages_viewed"},
-         "why": "Engagement is a secondary reading."}
+         "why": "A signup page works if more people sign up."}
       ]
     },
     {
@@ -59,10 +55,7 @@
       "labels": [
         {"grade": 2, "match": {"analysis_type": ["ab_test", "observational"], "group_col": "device",
                                "levels": ["mobile", "desktop"], "outcome_col": "signed_up"},
-         "why": "Signup rate by device, across the whole period."},
-        {"grade": 1, "match": {"analysis_type": ["ab_test", "observational"], "group_col": "device",
-                               "levels": ["mobile", "desktop"], "outcome_col": "pages_viewed"},
-         "why": "Same split, wrong measure."}
+         "why": "Signup rate by device, across the whole period."}
       ]
     },
     {
@@ -87,10 +80,7 @@
       "labels": [
         {"grade": 2, "match": {"analysis_type": "diff_in_diff", "group_col": "device", "levels": ["mobile", "desktop"],
                                "outcome_col": "signed_up"},
-         "why": "How the mobile-desktop gap in signups moved after the date."},
-        {"grade": 1, "match": {"analysis_type": "diff_in_diff", "group_col": "device", "levels": ["mobile", "desktop"],
-                               "outcome_col": "pages_viewed"},
-         "why": "Same comparison, wrong measure."}
+         "why": "How the mobile-desktop gap in signups moved after the date."}
       ]
     },
     {
@@ -123,10 +113,7 @@
       "paraphrases": ["Compare people shown the new page with people shown the old one at the same time.",
                       "Was there a holdout that kept the old signup page?",
                       "new page vs old page, same week, who signed up more", "did the A/B test of the signup page win"],
-      "labels": [
-        {"grade": 1, "match": {"analysis_type": "before_after", "outcome_col": "signed_up"},
-         "why": "Everyone saw the same page each day, so before against after is the closest question."}
-      ]
+      "labels": []
     },
     {
       "id": "su-everyone",
@@ -136,10 +123,7 @@
       "paraphrases": ["Compare visitors exposed to the new page with visitors who weren't.",
                       "exposed vs not exposed signup rate", "Did the people who got the new page convert better than the rest?",
                       "do those who saw the redesign sign up more than those who didnt"],
-      "labels": [
-        {"grade": 1, "match": {"analysis_type": "before_after", "outcome_col": "signed_up"},
-         "why": "When building the table they said everyone got it, so only before against after is possible."}
-      ]
+      "labels": []
     },
     {
       "id": "su-revenue",
@@ -147,10 +131,7 @@
       "unanswerable": "missing_outcome",
       "paraphrases": ["Are we making more money since the signup page changed?", "Did the redesign grow sales?",
                       "revenue impact of the new page", "did the new page bring in more mony"],
-      "labels": [
-        {"grade": 1, "match": {"analysis_type": "before_after", "outcome_col": "signed_up"},
-         "why": "No money column; signups are the nearest measure."}
-      ]
+      "labels": []
     }
   ]
 }

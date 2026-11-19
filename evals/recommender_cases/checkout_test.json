@@ -2,7 +2,7 @@
   "dataset": "checkout_test",
   "path": "sample_data/checkout_test.csv",
   "about": "A randomized test of a new checkout. One row per user; 'variant' says which checkout they saw.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-17 and regraded 2026-11-18: no credit for a near answer on a different measure.",
   "renames": {"variant": "checkout_version", "purchased": "converted", "revenue": "revenue_usd", "sessions": "visits",
               "device": "platform", "country": "market"},
   "goals": [
@@ -13,9 +13,7 @@
                       "new checkout = more orders?", "did the new chekout get more ppl to purchse"],
       "labels": [
         {"grade": 2, "match": {"group_col": "variant", "treated": "new_checkout", "base": "control", "outcome_col": "purchased"},
-         "why": "Purchase rate, new checkout against the old one."},
-        {"grade": 1, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue"},
-         "why": "Revenue goes up with purchases, but it isn't the count of buyers."}
+         "why": "Purchase rate, new checkout against the old one."}
       ]
     },
     {
@@ -25,24 +23,17 @@
                       "more $ from each customer on the new flow?", "does the new chekout make more revenu per person"],
       "labels": [
         {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue"},
-         "why": "Average revenue per user by checkout."},
-        {"grade": 1, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased"},
-         "why": "More buyers usually means more money, but it doesn't measure money."}
+         "why": "Average revenue per user by checkout."}
       ]
     },
     {
       "id": "ck-worth-it",
       "goal": "Was the checkout redesign worth it?",
+      "unanswerable": "missing_outcome",
+      "note": "Worth it needs the redesign's cost, which isn't in the table (Ben, 2026-11-18).",
       "paraphrases": ["Should we keep the new checkout?", "Did the redesign pay off?",
                       "is the new checkout a win or not", "Was the checkout project a good investment?"],
-      "labels": [
-        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue"},
-         "why": "'Worth it' is usually money."},
-        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased"},
-         "why": "Or whether more people bought. Both fit a vague goal equally well."},
-        {"grade": 1, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "sessions"},
-         "why": "Engagement is a weak reading of 'worth it'."}
-      ]
+      "labels": []
     },
     {
       "id": "ck-sessions",
@@ -63,9 +54,7 @@
                       "randomized test, did conversions improve", "In our 50/50 test, did more people check out on the new version?"],
       "labels": [
         {"grade": 2, "match": {"group_col": "variant", "treated": "new_checkout", "base": "control", "outcome_col": "purchased"},
-         "why": "Conversion is the purchase rate."},
-        {"grade": 1, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue"},
-         "why": "Related, but not conversion."}
+         "why": "Conversion is the purchase rate."}
       ]
     },
     {
@@ -84,10 +73,11 @@
       "paraphrases": ["Is the purchase rate lower in Germany than in the US?", "DE vs US conversion",
                       "Are Germans less likely to buy than Americans?", "do german shoppers purchase less often then US ones"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "country", "levels": ["DE", "US"], "outcome_col": "purchased"},
-         "why": "Purchase rate by country, the two countries named."},
-        {"grade": 1, "match": {"group_col": "country", "levels": ["DE", "US"], "outcome_col": "revenue"},
-         "why": "Same countries, but money rather than buying."}
+        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased",
+                               "effect_by": "country"},
+         "why": "In an experiment, compare countries within each checkout: does the new checkout's effect on buying differ by country? (Ben, 2026-11-17.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "country", "levels": ["DE", "US"], "outcome_col": "purchased"},
+         "why": "Purchase rate by country, ignoring which checkout people saw."}
       ]
     },
     {
@@ -96,10 +86,11 @@
       "paraphrases": ["Do desktop users bring in more money than mobile users?", "revenue by device",
                       "Mobile vs desktop: who spends more?", "does mobile make less revenue then desktop"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "revenue"},
-         "why": "Revenue by device."},
-        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "purchased"},
-         "why": "Same split, but buying rather than money."}
+        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue",
+                               "effect_by": "device"},
+         "why": "Does the new checkout's effect on revenue differ between mobile and desktop? (Ben, 2026-11-17.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "revenue"},
+         "why": "Revenue by device, ignoring which checkout people saw."}
       ]
     },
     {
@@ -109,9 +100,7 @@
                       "is the old flow still earning more", "Did the new checkout hurt sales?"],
       "labels": [
         {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "revenue"},
-         "why": "Revenue by checkout; the direction doesn't change which question answers it."},
-        {"grade": 1, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased"},
-         "why": "Sales could mean the number of buyers."}
+         "why": "Revenue by checkout; the direction doesn't change which question answers it."}
       ]
     },
     {
@@ -120,10 +109,11 @@
       "paraphrases": ["Does mobile convert worse than desktop?", "purchase rate on phones vs computers",
                       "Is buying lower on mobile?", "do ppl on mobile purchase less"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "purchased"},
-         "why": "Purchase rate by device."},
-        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "revenue"},
-         "why": "Same split, money rather than buying."}
+        {"grade": 2, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased",
+                               "effect_by": "device"},
+         "why": "Does the new checkout's effect on buying differ between mobile and desktop? (Ben, 2026-11-17.) The app can't suggest this yet."},
+        {"grade": 1, "match": {"group_col": "device", "levels": ["mobile", "desktop"], "outcome_col": "purchased"},
+         "why": "Purchase rate by device, ignoring which checkout people saw."}
       ]
     },
     {
@@ -132,10 +122,7 @@
       "unanswerable": "no_dates",
       "paraphrases": ["Since the new checkout went live, are we selling more?", "Did sales rise after the launch date?",
                       "purchases before vs after the release", "have orders gone up since we rolled out the new checkout"],
-      "labels": [
-        {"grade": 1, "match": {"group_col": "variant", "levels": ["new_checkout", "control"], "outcome_col": "purchased"},
-         "why": "No dates, but comparing the two checkouts answers whether the new one sells more."}
-      ]
+      "labels": []
     },
     {
       "id": "ck-refunds",
