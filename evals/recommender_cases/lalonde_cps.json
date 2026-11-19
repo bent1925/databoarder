@@ -12,8 +12,8 @@
       "paraphrases": ["Do people who went through training earn more?", "earnings impact of the training",
                       "Did training increase income?", "did the job trainng raise pay"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "trained", "treated": "1", "base": "0", "outcome_col": "re78"},
-         "why": "Earnings after training, trainees against others."}
+        {"grade": 2, "match": {"analysis_type": "observational", "group_col": "trained", "treated": "1", "base": "0", "outcome_col": "re78"},
+         "why": "Earnings after training, trainees against similar non-trainees. In this version people weren't randomly assigned, and a plain difference gets the sign wrong (Ben, 2026-11-18)."}
       ]
     },
     {

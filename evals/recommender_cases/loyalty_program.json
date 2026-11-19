@@ -2,7 +2,7 @@
   "dataset": "loyalty_program",
   "path": "sample_data/loyalty_program.csv",
   "about": "Customers who chose whether to join a loyalty program. Past spend and age were measured before joining; spend in the next 90 days and renewal after.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-18.",
   "renames": {"joined_program": "program", "spend_next_90d": "rev_following_qtr", "past_spend": "rev_prior_year",
               "renewed": "retained", "age": "cust_age", "region": "territory"},
   "goals": [
@@ -13,9 +13,7 @@
                       "Do people in the loyalty program buy more afterwards?", "do loyalty memebers spend more next quarter"],
       "labels": [
         {"grade": 2, "match": {"group_col": "joined_program", "treated": "yes", "base": "no", "outcome_col": "spend_next_90d"},
-         "why": "Spend after joining, members against non-members."},
-        {"grade": 1, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
-         "why": "Right groups, other result."}
+         "why": "Spend after joining, members against non-members."}
       ]
     },
     {
@@ -24,21 +22,18 @@
       "paraphrases": ["Are members more likely to renew?", "renewal rate, members vs non-members",
                       "Does the program improve renewals?", "do ppl who join renew more"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
-         "why": "Renewal by membership."}
+        {"grade": 2, "match": {"analysis_type": "observational", "group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
+         "why": "People chose to join, and joiners already spent more, so the effect of joining needs members compared with similar non-members (Ben, 2026-11-18). A plain members-vs-others difference gets no credit."}
       ]
     },
     {
       "id": "ly-worth",
       "goal": "Is the loyalty program worth it?",
+      "unanswerable": "missing_outcome",
+      "note": "Worth it needs the program's cost, which isn't in the table (Ben, 2026-11-18).",
       "paraphrases": ["Does the loyalty program pay off?", "Should we keep running the program?",
                       "is loyalty worth the cost", "Is the program a good investment?"],
-      "labels": [
-        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
-         "why": "'Worth it' is usually future spend."},
-        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
-         "why": "Or keeping customers. Both fit equally well."}
-      ]
+      "labels": []
     },
     {
       "id": "ly-stick",
@@ -79,8 +74,8 @@
       "paraphrases": ["Once people join, do they spend more?", "post-join spend for members vs others",
                       "Does becoming a member increase purchases?", "do customers buy more after they sign up for loyalty"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
-         "why": "Spend after joining."}
+        {"grade": 2, "match": {"analysis_type": "observational", "group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
+         "why": "People chose to join, and joiners already spent more, so the effect of joining needs members compared with similar non-members (Ben, 2026-11-18). A plain members-vs-others difference gets no credit."}
       ]
     },
     {
@@ -99,8 +94,8 @@
       "paraphrases": ["How does joining change revenue over the following quarter?", "member revenue in the next 90 days",
                       "Does the program lift short-term revenue?", "next quarter revenu for people who join vs dont"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
-         "why": "Spend in the next 90 days is next-quarter revenue."}
+        {"grade": 2, "match": {"analysis_type": "observational", "group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
+         "why": "People chose to join, and joiners already spent more, so the effect of joining needs members compared with similar non-members (Ben, 2026-11-18). A plain members-vs-others difference gets no credit."}
       ]
     },
     {
@@ -109,10 +104,7 @@
       "unanswerable": "no_dates",
       "paraphrases": ["Since the program launched, are customers spending more?", "spend before vs after the program started",
                       "Did revenue rise after the loyalty launch?", "spending since launch, up or down"],
-      "labels": [
-        {"grade": 1, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "spend_next_90d"},
-         "why": "No dates, but members against non-members is the nearest question."}
-      ]
+      "labels": []
     },
     {
       "id": "ly-satisfied",
@@ -120,10 +112,7 @@
       "unanswerable": "missing_outcome",
       "paraphrases": ["Do members have higher NPS?", "Are members happier with us?",
                       "member satisfaction vs non-members", "do members like us more"],
-      "labels": [
-        {"grade": 1, "match": {"group_col": "joined_program", "levels": ["yes", "no"], "outcome_col": "renewed"},
-         "why": "No satisfaction measure; renewing is the nearest sign of it."}
-      ]
+      "labels": []
     }
   ]
 }
