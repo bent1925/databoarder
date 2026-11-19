@@ -29,12 +29,11 @@
     {
       "id": "ll-worth",
       "goal": "Was the training worth the money?",
+      "unanswerable": "missing_outcome",
+      "note": "Worth the money needs the program's cost, which isn't in the table (Ben, 2026-11-18).",
       "paraphrases": ["Did the training pay off?", "Is the program worth funding again?",
                       "was training a good investment", "Should we keep paying for job training?"],
-      "labels": [
-        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
-         "why": "The payoff is later earnings."}
-      ]
+      "labels": []
     },
     {
       "id": "ll-find-work",
