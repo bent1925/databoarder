@@ -2,7 +2,7 @@
   "dataset": "lalonde_cps",
   "path": "sample_data/lalonde_cps.csv",
   "about": "The LaLonde job-training data: trainees against a general survey sample. re74 and re75 are earnings before training, re78 after. People weren't randomly assigned in this version.",
-  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Not yet reviewed by Ben.",
+  "review": "Goals and labels drafted by Claude on 2026-11-14, paraphrases written by Claude. Labels reviewed by Ben on 2026-11-18.",
   "renames": {"trained": "treat", "re78": "earn_1978", "re74": "earn_1974", "re75": "earn_1975", "educ": "school_years",
               "marr": "married", "nodegree": "no_diploma"},
   "goals": [
@@ -41,10 +41,7 @@
       "unanswerable": "missing_outcome",
       "paraphrases": ["Are trainees more likely to be employed afterwards?", "employment after training",
                       "Did the program get people jobs?", "did trainng help ppl get hired"],
-      "labels": [
-        {"grade": 1, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
-         "why": "No employment column. Average 1978 earnings is the closest question, but it can rise while the share of people working stays flat, so it isn't an answer to this goal."}
-      ]
+      "labels": []
     },
     {
       "id": "ll-chose",
@@ -54,8 +51,8 @@
                       "Not randomized: do people who chose training earn more afterwards?",
                       "Among volunteers for training, are later earnings higher?", "they picked training themselfs, earning more after?"],
       "labels": [
-        {"grade": 2, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
-         "why": "Later earnings, comparing similar people."}
+        {"grade": 2, "match": {"analysis_type": "observational", "group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "The person flags that trainees chose to train, so they're asking about the effect: later earnings against similar non-trainees (Ben, 2026-11-18)."}
       ]
     },
     {
@@ -108,10 +105,28 @@
       "unanswerable": "no_dates",
       "paraphrases": ["Since the program began, have earnings risen?", "earnings before vs after the 1976 start",
                       "Did incomes climb once training launched?", "pay since the program started, up?"],
+      "labels": []
+    },
+    {
+      "id": "ll-race",
+      "goal": "Do Black workers earn less than other workers in 1978?",
+      "paraphrases": ["1978 earnings, Black vs non-Black workers", "Is pay in 1978 lower for Black workers?",
+                      "Are Black workers' 1978 incomes lower than everyone else's?", "do black workers make less in 78"],
       "labels": [
-        {"grade": 1, "match": {"group_col": "trained", "levels": ["1", "0"], "outcome_col": "re78"},
-         "why": "Earnings years are columns, not dates, so trainees against others is the nearest question."}
+        {"grade": 2, "match": {"group_col": "black", "levels": ["1", "0"], "outcome_col": "re78"},
+         "why": "1978 earnings by race, as a description."}
       ]
+    },
+    {
+      "id": "ll-growth",
+      "goal": "Did trainees' earnings grow more than others' from 1975 to 1978?",
+      "unanswerable": "no_dates",
+      "note": "The years are separate columns, not dates, so the app can't compare growth across them (Ben, 2026-11-18).",
+      "paraphrases": ["Did earnings rise more for trainees between 1975 and 1978?",
+                      "earnings growth 1975 to 1978, trainees vs others",
+                      "Compared with non-trainees, did trainees' pay grow faster from 75 to 78?",
+                      "did trainees get a bigger raise from 75 to 78"],
+      "labels": []
     },
     {
       "id": "ll-health",
