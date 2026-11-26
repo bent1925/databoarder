@@ -3,7 +3,7 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-14
+**Last updated:** 2026-11-25
 
 ## How we work
 
@@ -81,6 +81,21 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
    forecasting, drivers. Not an up-front question yet; infer it from the goal and the table. Phase 2 adds a `task`
    field to candidates; phase 4 adds a `different_task` "can't answer" reason and test cases. New kinds of analysis
    only if real users ask. Details: [plans/recommender.md, "Kinds of question"](plans/recommender.md#kinds-of-question-noted-2026-11-14-for-later).
+
+## To do: from a talk with a potential customer (2026-11-25)
+
+Not yet planned or ordered against "Next up". Each needs a plan in `docs/plans/` before building.
+
+1. **A version of the screens for biomedical researchers and scientists.** Their words, examples and defaults
+   (e.g. "treatment arm", "outcome", study designs instead of campaigns), probably with more of the technical
+   detail shown by default.
+2. **Graphs ready for a manuscript.** Figures to drop into a paper, drawn by fixed code from the same frozen
+   table and approved choices as the report, with exportable vector files and the script that redraws them.
+3. **An insight generator: "what sticks out in this data?"** Deliberately close to p-hacking; Ben wants to try it
+   to see what it looks like. To stay within the review rules in [AGENTS.md](../AGENTS.md), it would need to:
+   say how many things were looked at, correct for that (as the Research mode's Holm correction does), call
+   every finding a lead to check, never an answer, and say that checking a lead needs new data or a question
+   chosen before looking. Fixed code does the search; the AI may only describe what the code found.
 
 ## Open question: why not just use Claude or ChatGPT?
 
