@@ -89,6 +89,12 @@ Not yet planned or ordered against "Next up". Each needs a plan in `docs/plans/`
 1. **A version of the screens for biomedical researchers and scientists.** Their words, examples and defaults
    (e.g. "treatment arm", "outcome", study designs instead of campaigns), probably with more of the technical
    detail shown by default.
+   **They use GraphPad Prism today.** Databoarder can't replace it yet: of what labs usually use Prism for, it only
+   covers comparing two groups. Missing: more than two groups (ANOVA with corrected follow-up tests), paired and
+   repeated-measures data (a table must be one row per person now), dose-response curve fits, survival curves,
+   non-parametric tests, small hand-entered datasets, and graphs for papers (item 2). Pitch it as "the right
+   test, explained and reproducible", not as a Prism replacement. **Ask them first:** which Prism analyses do
+   they actually run each month? That shows whether this is a few new analyses or a different product.
 2. **Graphs ready for a manuscript.** Figures to drop into a paper, drawn by fixed code from the same frozen
    table and approved choices as the report, with exportable vector files and the script that redraws them.
 3. **An insight generator: "what sticks out in this data?"** Deliberately close to p-hacking; Ben wants to try it
