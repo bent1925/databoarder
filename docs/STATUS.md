@@ -3,7 +3,7 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-14
+**Last updated:** 2026-11-25
 
 ## How we work
 
@@ -25,7 +25,7 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   when people chose the program, a goal about its effect needs the "compare similar people" method, and a plain
   difference gets no credit; in an experiment, "do X customers do more than Y?" wants the effect compared across
   X and Y (`effect_by`), which the app can't suggest yet. The labelled cases are a test, never training data.
-- **README** brought up to date with `main` (PR #9, merged 2026-11-14).
+- **README** brought up to date with `main` (PR #9, merged 2026-11-14), and given a short status section (2026-11-25).
 - **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
   screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.
 

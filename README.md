@@ -4,6 +4,12 @@
 
 Ask a business question, upload a CSV, and get a plain-language answer with the checks behind it. Every report comes with a script that reproduces each number from the raw file. Covers A/B tests, before/after changes (with or without a comparison group), and comparisons where people chose for themselves.
 
+## Status (November 2026)
+A working demo. The analyses, the one-screen combine flow and its browser tests are done.
+In progress: AI suggestions for the combine screen's answers, and better ranking of the ready-made questions
+(today a well-fitting one is in the top 3 for 38% of test cases). Not yet suitable for real customer data: there
+is one shared password, and uploads are kept in memory. Details and next steps: [docs/STATUS.md](docs/STATUS.md).
+
 ## How it works, step by step
 1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed. If you have several files or a messy Excel export, use **Put them together first** (see [Putting files together](#putting-files-together-appcombinepy)): add everything your analyst sent, check a few numbers about the finished table, and answer the few choices that change the answer. Nothing is used until you've confirmed them.
 2. **How careful do you need to be?** The method is the same every time. Higher levels add more double-checks.
