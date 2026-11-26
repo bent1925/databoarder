@@ -22,10 +22,14 @@ is one shared password, and uploads are kept in memory. Details and next steps: 
 **What the AI does and doesn't do:** it turns a typed question into the form in step 5 and, in the step-by-step file builder, suggests steps if you ask. On the one-screen combine flow, the suggested answers come from fixed code. It sees column names, types, row counts and up to six example values per column, with IDs, emails and phone numbers masked to show only their format. It never sees your rows, and suggested steps do nothing until you confirm them. All statistics come from fixed, tested code.
 
 ## Screenshots
-(Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
+(Synthetic sample data with planted answers; see `sample_data/` and `tools/`. Retake them with
+`python tools/take_screenshots.py`.)
 
 **Set-up: the "How did people get it?" step picks the method**
 ![Setup](docs/screenshots/1-setup.png)
+
+**Putting files together: a messy pull, checked against a few numbers, with four choices to confirm**
+![Combine screen](docs/screenshots/5-combine.png)
 
 **Comparison group (difference-in-differences), "Right answer" mode with cross-checks**
 ![Comparison group report](docs/screenshots/3-comparison-group-report.png)
