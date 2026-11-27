@@ -8,7 +8,7 @@ Ask a business question, upload a CSV, and get a plain-language answer with the 
 A working demo. The analyses, the one-screen combine flow and its browser tests are done.
 In progress: AI suggestions for the combine screen's answers, and better ranking of the ready-made questions
 (today a well-fitting one is in the top 3 for 38% of test cases). Not yet suitable for real customer data: there
-is one shared password, and uploads are kept in memory. Details and next steps: [docs/STATUS.md](docs/STATUS.md).
+is one shared password, and uploads are kept in memory. Science mode for lab data (`/science`) is a first try, on branch `science-mode`. Details and next steps: [docs/STATUS.md](docs/STATUS.md).
 
 ## How it works, step by step
 1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed. If you have several files or a messy Excel export, use **Put them together first** (see [Putting files together](#putting-files-together-appcombinepy)): add everything your analyst sent, check a few numbers about the finished table, and answer the few choices that change the answer. Nothing is used until you've confirmed them.
@@ -88,6 +88,18 @@ phase 1 of a question recommender: [docs/plans/recommender.md](docs/plans/recomm
 - Same data in, identical report out (fixed seed).
 - The downloadable script stops if the original files or the rebuilt table don't match what the report used.
 - Browser tests (Playwright, `tests/browser/`) drive the combine screen end to end.
+
+## Science mode (`/science`, app/science/)
+A separate page for lab data, styled like a lab notebook. It's a first try at serving scientists who use GraphPad
+Prism. Paste cells or upload a CSV, laid out one column per group or one row per measurement. Then pick a question
+(do groups differ, are categories related, do two measurements move together) and answer the design questions:
+same subjects?, averages or ranks?, equal spread?, which pairs?, random assignment? Those answers decide the test:
+t tests, Welch's or ordinary one-way ANOVA with Tukey, Dunnett or Games-Howell, repeated-measures ANOVA with the
+Greenhouse-Geisser correction, Mann-Whitney, Kruskal-Wallis with Dunn, Wilcoxon, Friedman, Fisher's exact test with
+relative risk and odds ratio, chi-square, Pearson and Spearman. No AI is involved. The engine (`app/science/engine.py`)
+is copied word for word into the downloadable script, and the tests check that the script reproduces every number.
+Samples with planted answers: `static/science/` (made by `tools/make_science_samples.py`). Plan and later phases
+(two-way ANOVA, curve fits, survival, figures): [docs/plans/science-mode.md](docs/plans/science-mode.md).
 
 ## Analyses
 - **A/B test** (`app/ab_test.py`): two groups shown different versions at the same time.

@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databoarder Lab</title>
+<style>
+  :root {
+    --ink: #1b2a41; --muted: #55657d; --paper: #f7faff; --card: #ffffff; --line: #dbe4f0;
+    --grid: rgba(41, 109, 214, .075); --grid2: rgba(41, 109, 214, .15);
+    --teal: #0f9d9a; --teal-soft: #d4f4f1;
+    --hi: #ffef5c; --hi-soft: #fffad0;
+    --pink: #ff6f9c; --pink-soft: #ffe2eb;
+    --violet: #6b5cff; --violet-soft: #e9e6ff;
+    --lime: #6cc84a; --lime-soft: #e4f7da;
+    --orange: #ff9a3d; --orange-soft: #ffead6;
+    --margin: rgba(255, 99, 99, .45);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink); font: 500 16px/1.55 var(--sans);
+    background:
+      linear-gradient(90deg, transparent 0 34px, var(--margin) 34px 36px, transparent 36px) 0 0 / 100% 100% no-repeat,
+      linear-gradient(var(--grid2) 1px, transparent 1px) 0 0 / 100px 100px,
+      linear-gradient(90deg, var(--grid2) 1px, transparent 1px) 0 0 / 100px 100px,
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 20px 20px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 20px 20px,
+      var(--paper);
+    background-attachment: fixed;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 26px 16px 80px 52px; }
+  @media (max-width: 600px) { .wrap { padding-left: 16px; } body { background-size: 0 0, 100px 100px, 100px 100px, 20px 20px, 20px 20px, auto; } }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 26px; }
+  h1 { font: italic 700 34px/1.05 var(--serif); margin: 0; letter-spacing: -.01em; }
+  h1 .flask { font-style: normal; display: inline-block; transform: rotate(-12deg); margin-right: 4px; }
+  h1 .hl, .hl { background: linear-gradient(transparent 58%, var(--hi) 58%, var(--hi) 92%, transparent 92%); padding: 0 2px; }
+  .tagline { font: 600 15px var(--sans); color: var(--muted); margin-top: 6px; }
+  .switch { font: 700 13px var(--mono); color: var(--ink); text-decoration: none; border: 1.5px solid var(--ink); border-radius: 999px;
+    padding: 5px 12px; background: #fff; box-shadow: 2px 2px 0 var(--ink); }
+  .switch:hover { background: var(--hi-soft); }
+
+  .card { position: relative; background: var(--card); border: 1.5px solid var(--ink); border-radius: 14px; padding: 22px 22px 20px;
+    margin-bottom: 26px; box-shadow: 5px 5px 0 rgba(27, 42, 65, .9); }
+  .card::before { content: ""; position: absolute; top: -11px; left: 50%; width: 96px; height: 22px; margin-left: -48px;
+    background: rgba(255, 239, 92, .78); border: 1px solid rgba(27, 42, 65, .12); transform: rotate(-2.5deg); }
+  .card:nth-of-type(2n)::before { background: rgba(255, 111, 156, .42); transform: rotate(2deg); }
+  .card:nth-of-type(3n)::before { background: rgba(15, 157, 154, .35); transform: rotate(-1deg); }
+  .step { font: 700 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--teal); margin: 0 0 2px; }
+  .card h2 { font: 700 23px/1.2 var(--serif); margin: 0 0 6px; }
+  .how { color: var(--muted); font-size: 15px; margin: 0 0 16px; }
+  .muted { color: var(--muted); }
+  .hidden { display: none !important; }
+
+  .btn { font: 700 15.5px var(--sans); color: #fff; background: var(--teal); border: 1.5px solid var(--ink); border-radius: 10px;
+    padding: 10px 20px; cursor: pointer; box-shadow: 0 3px 0 var(--ink); transition: transform .08s, box-shadow .08s; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--ink); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: 0 3px 0 var(--ink); }
+  .btn.soft { background: var(--hi); color: var(--ink); }
+  .btn.small { padding: 6px 13px; font-size: 14px; }
+  .linkish { font: inherit; font-weight: 700; color: var(--violet); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+
+  .drop { border: 2px dashed var(--teal); border-radius: 12px; background: var(--teal-soft); padding: 22px; text-align: center; cursor: pointer; font-weight: 700; transition: .15s; }
+  .drop:hover, .drop.over { background: var(--hi-soft); border-color: var(--ink); }
+  .drop .big { font-size: 38px; line-height: 1.1; }
+  textarea { width: 100%; min-height: 130px; font: 13.5px/1.45 var(--mono); color: var(--ink); background: #fff;
+    border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 12px; resize: vertical; }
+  textarea:focus, select:focus, button:focus-visible { outline: 3px solid var(--hi); outline-offset: 1px; }
+  .samples { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }
+  .sample { text-align: left; font: inherit; color: var(--ink); background: #fff; border: 1.5px solid var(--ink); border-radius: 10px;
+    padding: 10px 12px; cursor: pointer; box-shadow: 2px 2px 0 var(--ink); }
+  .sample:hover { background: var(--hi-soft); }
+  .sample b { display: block; font-size: 14.5px; } .sample small { color: var(--muted); font-size: 12.5px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font: 700 13px var(--mono); background: var(--hi-soft);
+    border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 11px; margin: 0 6px 6px 0; }
+  .scroll { overflow-x: auto; }
+
+  .qs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .q { text-align: left; font: inherit; color: var(--ink); background: #fff; border: 1.5px solid var(--ink); border-radius: 12px;
+    padding: 14px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); transition: transform .1s; }
+  .q:hover { transform: translateY(-2px) rotate(-.3deg); }
+  .q.on { background: var(--teal-soft); }
+  .q .e { font-size: 30px; display: block; line-height: 1.2; }
+  .q b { font: 700 17px var(--serif); display: block; margin-top: 4px; }
+  .q small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .q .tests { font: 600 11.5px var(--mono); color: var(--teal); margin-top: 8px; display: block; }
+  .soon { margin-top: 16px; font-size: 13.5px; color: var(--muted); }
+  .soon .chip { background: #fff; border-style: dashed; color: var(--muted); font-weight: 600; }
+
+  .choice { border-top: 1.5px dashed var(--line); padding: 14px 0 4px; }
+  .choice:first-of-type { border-top: 0; padding-top: 0; }
+  .choice .lab { font-weight: 800; margin: 0 0 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .choice .help { font-size: 13.5px; color: var(--muted); margin: 0 0 8px; }
+  .tag { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; border-radius: 999px; padding: 1px 8px; border: 1.2px solid var(--ink); }
+  .tag.guess { background: var(--violet-soft); } .tag.need { background: var(--hi); } .tag.rec { background: var(--lime-soft); }
+  .seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .seg button { font: inherit; font-weight: 700; font-size: 14.5px; color: var(--ink); background: #fff; text-align: left;
+    border: 1.5px solid var(--ink); border-radius: 10px; padding: 7px 13px; cursor: pointer; }
+  .seg button small { display: block; font-weight: 500; font-size: 12.5px; color: var(--muted); }
+  .seg.need button { border-style: dashed; }
+  .seg button.on { background: var(--teal-soft); box-shadow: 0 3px 0 var(--ink); transform: translateY(-1px); }
+  select { font: inherit; font-weight: 600; color: var(--ink); background: #fff; border: 1.5px solid var(--ink); border-radius: 10px; padding: 7px 10px; max-width: 100%; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tog { font: 600 14px var(--sans); color: var(--ink); background: #fff; border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .tog.on { border-color: var(--ink); background: var(--hi-soft); font-weight: 800; }
+  .tog .n { font: 700 11px var(--mono); background: var(--ink); color: #fff; border-radius: 999px; padding: 0 6px; margin-right: 6px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .grid2 label { font-size: 13px; font-weight: 700; color: var(--muted); display: block; margin-bottom: 3px; }
+  .grid2 select { width: 100%; }
+  .waiting { font-size: 14px; color: var(--muted); }
+
+  .readback { font: 600 17px/1.5 var(--serif); background: var(--hi-soft); border: 1.5px solid var(--ink); border-radius: 10px; padding: 14px 16px; }
+  .note { font-size: 14px; background: var(--violet-soft); border: 1.2px solid var(--ink); border-radius: 10px; padding: 8px 12px; margin-top: 10px; }
+  .err { color: #b8124f; font-weight: 700; margin-top: 10px; }
+  .problem { background: var(--pink-soft); border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-weight: 700; }
+
+  .verdict { display: flex; gap: 16px; align-items: flex-start; border: 1.5px solid var(--ink); border-radius: 12px; padding: 16px 18px; }
+  .verdict.clear_difference { background: var(--lime-soft); } .verdict.no_clear_difference { background: var(--hi-soft); }
+  .verdict .face { font-size: 46px; line-height: 1; }
+  .verdict h3 { font: 700 24px/1.2 var(--serif); margin: 0 0 6px; }
+  .verdict p { margin: 4px 0; }
+  .causal { font-size: 14.5px; margin-top: 12px; padding-left: 12px; border-left: 4px solid var(--violet); }
+  .fig { margin-top: 18px; }
+  .fig .cap { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .fig .cap b { font: 700 12px var(--mono); color: var(--ink); }
+  svg { max-width: 100%; height: auto; display: block; }
+  svg text { font: 600 12px var(--sans); fill: var(--muted); }
+  svg .lbl { fill: var(--ink); font-weight: 800; }
+  h4 { font: 700 18px var(--serif); margin: 22px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 700 11.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  td.v, td.num { font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
+  tr.clear td { background: var(--lime-soft); }
+  .results td:first-child { color: var(--muted); }
+  .why { background: var(--teal-soft); border: 1.2px solid var(--ink); border-radius: 10px; padding: 10px 14px; margin-top: 14px; font-size: 14.5px; }
+  .why b { font-family: var(--serif); }
+  .item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14.5px; }
+  .item .s { flex: none; width: 24px; text-align: center; }
+  .item b { display: block; }
+  .tabbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 22px 0 12px; border-bottom: 1.5px solid var(--ink); padding-bottom: 10px; }
+  .tab { font: 700 14px var(--sans); color: var(--ink); background: #fff; border: 1.5px solid var(--ink); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+  .tab.on { background: var(--hi); }
+  .audit .tech { font-size: 13px; color: var(--muted); }
+  code, pre { font-family: var(--mono); font-size: 12.5px; }
+  code { background: var(--violet-soft); border-radius: 5px; padding: 1px 5px; word-break: break-word; }
+  pre { background: var(--ink); color: #e9f3ff; border-radius: 10px; padding: 14px; overflow: auto; max-height: 420px; margin: 10px 0 0; }
+  .fp { font: 600 12.5px var(--mono); background: var(--hi-soft); border: 1.2px solid var(--ink); border-radius: 8px; padding: 8px 12px; word-break: break-all; }
+  ul.plain { margin: 6px 0 0; padding-left: 20px; }
+  .spin { display: inline-block; width: 13px; height: 13px; border: 2.5px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: s .7s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  @media (max-width: 520px) { .verdict { flex-direction: column; gap: 6px; } h1 { font-size: 28px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="flask">🧪</span>Databoarder <span class="hl">Lab</span></h1>
+      <div class="tagline">The right test, explained, and a script that reproduces every number.</div>
+    </div>
+    <a class="switch" href="/">← campaign mode</a>
+  </header>
+
+  <section class="card" id="s1">
+    <p class="step">Step 01 · the data</p>
+    <h2>Add your measurements</h2>
+    <p class="how">A CSV file, or cells pasted straight from your spreadsheet. Either <b>one column per group</b> (the way Prism's column tables look) or <b>one row per measurement</b> with a column naming the group. We tidy obvious formatting and list exactly what changed.</p>
+    <div id="add">
+      <div id="drop" class="drop"><div class="big">🧫</div>
+        <div>Drop a CSV here, or <button class="linkish" id="pick">browse</button></div>
+        <input type="file" id="file" accept=".csv,text/csv" class="hidden"></div>
+      <div class="row"><button class="linkish" id="showpaste">📋 Paste cells instead</button></div>
+      <div id="pastebox" class="hidden" style="margin-top:10px">
+        <textarea id="paste" placeholder="Control	Treated&#10;4.1	5.3&#10;3.8	6.0&#10;4.4	5.1"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn small" id="usepaste">Use these cells</button><span class="muted" style="font-size:13px">Include the header row. Empty cells count as missing.</span></div>
+      </div>
+      <p class="muted" style="margin:16px 0 0;font-size:14px">No data to hand? Try a sample (made-up numbers with a known answer):</p>
+      <div class="samples">
+        <button class="sample" data-f="tumour_volume.csv"><b>🐭 Tumour volume by dose</b><small>4 groups of mice · ANOVA</small></button>
+        <button class="sample" data-f="blood_pressure.csv"><b>🩺 Blood pressure over 8 weeks</b><small>Same patients, 3 visits · repeated measures</small></button>
+        <button class="sample" data-f="infection_counts.csv"><b>💉 Infections, vaccine vs placebo</b><small>2×2 counts · Fisher's test</small></button>
+        <button class="sample" data-f="gene_expression.csv"><b>🧬 mRNA vs protein</b><small>24 samples · correlation</small></button>
+      </div>
+    </div>
+    <div id="info" class="hidden"></div>
+    <div id="err1" class="err"></div>
+  </section>
+
+  <section class="card hidden" id="s2">
+    <p class="step">Step 02 · the question</p>
+    <h2>What do you want to know?</h2>
+    <div class="qs" id="qs"></div>
+    <div class="soon">Coming next: <span class="chip">two-way ANOVA</span><span class="chip">mixed-effects models</span><span class="chip">dose-response &amp; curve fits</span><span class="chip">survival curves</span><span class="chip">regression</span><span class="chip">ROC &amp; Bland-Altman</span><span class="chip">PCA &amp; clustering</span><span class="chip">sample size</span><span class="chip">figures for papers</span></div>
+  </section>
+
+  <section class="card hidden" id="s3">
+    <p class="step">Step 03 · the design</p>
+    <h2>Tell us how the experiment was set up</h2>
+    <p class="how">These choices decide which test runs. Nothing is picked behind your back: anything we guessed from your table is marked <span class="tag guess">guessed</span>, and anything only you can answer is marked <span class="tag need">your call</span>.</p>
+    <div id="setup"></div>
+    <div class="row"><button class="btn" id="check" disabled>Check my choices</button><span class="waiting" id="waiting"></span></div>
+    <div id="err3" class="err"></div>
+  </section>
+
+  <section class="card hidden" id="s4">
+    <p class="step">Step 04 · read it back</p>
+    <h2>Is this what you want to run?</h2>
+    <div class="readback" id="readback"></div>
+    <div id="rbnotes"></div>
+    <div class="row"><button class="btn" id="run">✅ Yes, run it</button><button class="linkish" id="back">✏️ Change something</button></div>
+    <div id="err4" class="err"></div>
+  </section>
+
+  <section class="card hidden" id="report"></section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const S = { ds: null, analysis: null, c: {}, guessed: new Set(), spec: null };
+const COLORS = ["#0f9d9a", "#6b5cff", "#ff6f9c", "#ff9a3d", "#6cc84a", "#2f80ed", "#b55fd6", "#e0b100"];
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "Something went wrong. Try again, or reload the page.");
+  return data;
+}
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+function busy(btn, on, text) { btn.disabled = on; if (on) { btn.dataset.t = btn.textContent; btn.innerHTML = `<span class="spin"></span>${text}`; } else if (btn.dataset.t) { btn.textContent = btn.dataset.t; delete btn.dataset.t; } }
+
+/* ---------- 1 data ---------- */
+$("pick").onclick = (e) => { e.stopPropagation(); $("file").click(); };
+$("drop").onclick = () => $("file").click();
+$("file").onchange = (e) => e.target.files[0] && upload(e.target.files[0]);
+["dragover", "dragenter"].forEach((t) => $("drop").addEventListener(t, (e) => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => $("drop").addEventListener(t, (e) => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", (e) => e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]));
+$("showpaste").onclick = () => { $("pastebox").classList.toggle("hidden"); $("paste").focus(); };
+$("usepaste").onclick = async () => {
+  $("err1").textContent = "";
+  try { loaded(await post("/api/science/paste", { text: $("paste").value, name: "pasted_data.csv" })); }
+  catch (e) { $("err1").textContent = "😕 " + e.message; }
+};
+document.querySelectorAll(".sample").forEach((b) => b.onclick = async () => {
+  const blob = await (await fetch("/static/science/" + b.dataset.f)).blob();
+  upload(new File([blob], b.dataset.f, { type: "text/csv" }));
+});
+
+async function upload(file) {
+  $("err1").textContent = "";
+  const fd = new FormData(); fd.append("file", file);
+  try { loaded(await api("/api/science/upload", { method: "POST", body: fd })); }
+  catch (e) { $("err1").textContent = "😕 " + e.message; }
+}
+
+function loaded(d) {
+  S.ds = d; S.analysis = null; S.c = {}; S.guessed = new Set();
+  const cols = d.columns.map((c) => c.name);
+  $("add").classList.add("hidden");
+  $("info").classList.remove("hidden");
+  $("info").innerHTML = `<span class="chip">📄 ${esc(d.name)}</span><span class="chip">${d.rows} rows</span><span class="chip">${cols.length} columns</span>
+    <button class="linkish" id="peek">👀 Peek</button> · <button class="linkish" id="other">🔄 Other data</button>
+    <div id="prev" class="scroll hidden" style="margin-top:10px"><table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${d.preview.map((r) => `<tr>${cols.map((c) => `<td class="num">${r[c] === null ? '<span class="muted">empty</span>' : esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    ${d.rows > d.preview.length ? `<p class="muted" style="font-size:13px">First ${d.preview.length} of ${d.rows} rows.</p>` : ""}</div>
+    ${d.prep.steps.length ? `<div class="note">🧹 Tidied for you (also in the script):<ul class="plain">${d.prep.steps.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
+    ${d.prep.notes.map((t) => `<div class="note">💡 ${esc(t)}</div>`).join("")}`;
+  $("peek").onclick = () => $("prev").classList.toggle("hidden");
+  $("other").onclick = () => { $("add").classList.remove("hidden"); $("info").classList.add("hidden"); hideFrom(2); $("file").value = ""; };
+  hideFrom(3);
+  $("s2").classList.remove("hidden");
+  renderQuestions();
+}
+
+function hideFrom(n) {
+  const ids = ["s2", "s3", "s4", "report"].slice(n - 2);
+  ids.forEach((id) => $(id).classList.add("hidden"));
+}
+
+/* ---------- 2 question ---------- */
+const QUESTIONS = [
+  { k: "compare_groups", e: "📊", t: "Do groups differ?", s: "Compare a measurement across 2 or more groups or time points.",
+    tests: "t tests · ANOVA · Tukey · Dunnett · Mann-Whitney · Kruskal-Wallis · Friedman" },
+  { k: "contingency", e: "🧮", t: "Are categories related?", s: "Counts: how many in each group had each outcome.",
+    tests: "Fisher's exact · chi-square · relative risk · odds ratio" },
+  { k: "correlation", e: "📈", t: "Do two measurements move together?", s: "Two numbers measured on the same samples.",
+    tests: "Pearson · Spearman" },
+];
+function renderQuestions() {
+  $("qs").innerHTML = QUESTIONS.map((q) => `<button class="q ${S.analysis === q.k ? "on" : ""}" data-k="${q.k}"><span class="e">${q.e}</span><b>${q.t}</b><small>${q.s}</small><span class="tests">${q.tests}</span></button>`).join("");
+  $("qs").querySelectorAll(".q").forEach((b) => b.onclick = () => pickQuestion(b.dataset.k));
+}
+function pickQuestion(k) {
+  S.analysis = k; S.c = {}; S.guessed = new Set();
+  const g = (S.ds.guesses || {})[k] || {};
+  Object.entries(g).forEach(([key, v]) => { if (v !== null && v !== undefined) { S.c[key] = v; S.guessed.add(key); } });
+  if (k === "compare_groups" && S.c.layout === "long" && S.c.group_col) { S.c.groups = levels(S.c.group_col); S.guessed.add("groups"); }
+  if (k === "contingency") fillContingency();
+  if (k === "compare_groups" && !S.c.layout) { S.c.layout = "wide"; S.guessed.add("layout"); }
+  if (k === "contingency" && !S.c.layout) { S.c.layout = "rows"; S.guessed.add("layout"); }
+  renderQuestions(); hideFrom(4);
+  $("s3").classList.remove("hidden");
+  renderSetup();
+  $("s3").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ---------- 3 set-up ---------- */
+const col = (name) => S.ds.columns.find((c) => c.name === name);
+const levels = (name) => (col(name) || {}).levels || [];
+const numeric = () => S.ds.columns.filter((c) => c.numeric).map((c) => c.name);
+const allCols = () => S.ds.columns.map((c) => c.name);
+
+function fillContingency() {
+  const c = S.c;
+  if (c.layout === "counts") {
+    if (c.label_col && !c.rows) { c.rows = levels(c.label_col); S.guessed.add("rows"); }
+    if (!c.cols) { c.cols = []; }
+  } else {
+    if (c.row_col && !c.rows) { c.rows = levels(c.row_col); S.guessed.add("rows"); }
+    if (c.col_col && !c.cols) { c.cols = levels(c.col_col); S.guessed.add("cols"); }
+  }
+}
+
+function tag(key, need) {
+  if (S.guessed.has(key)) return `<span class="tag guess">guessed</span>`;
+  if (need && (S.c[key] === undefined || S.c[key] === null)) return `<span class="tag need">your call</span>`;
+  return "";
+}
+function seg(key, opts, need = true) {
+  const v = S.c[key];
+  return `<div class="seg ${need && v === undefined ? "need" : ""}">${opts.map((o) => `<button data-seg="${key}" data-v='${esc(JSON.stringify(o.v))}' class="${JSON.stringify(v) === JSON.stringify(o.v) ? "on" : ""}">${esc(o.l)}${o.s ? `<small>${esc(o.s)}</small>` : ""}</button>`).join("")}</div>`;
+}
+function select(key, options, blank) {
+  const v = S.c[key];
+  return `<select data-sel="${key}">${blank !== undefined ? `<option value="">${esc(blank)}</option>` : (v ? "" : `<option value="">Choose…</option>`)}${options.map((o) => `<option ${o === v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+}
+function chips(key, options) {
+  const chosen = S.c[key] || [];
+  return `<div class="chips">${options.map((o) => { const i = chosen.indexOf(o); return `<button class="tog ${i >= 0 ? "on" : ""}" data-chip="${key}" data-v="${esc(o)}">${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}${esc(o)}</button>`; }).join("")}</div>`;
+}
+const choice = (label, key, help, body, need = true) => `<div class="choice"><p class="lab">${label} ${tag(key, need)}</p>${help ? `<p class="help">${help}</p>` : ""}${body}</div>`;
+
+const ASSIGN = [{ v: "random", l: "Yes, at random", s: "Randomised" }, { v: "not_random", l: "No", s: "e.g. groups by genotype, sex or disease" }, { v: "unsure", l: "Not sure", s: "Treated as not random" }];
+
+function setupCompare() {
+  const c = S.c; let h = "";
+  h += choice("How is the table laid out?", "layout", "", seg("layout", [{ v: "wide", l: "One column per group" }, { v: "long", l: "A column names the group", s: "one row per measurement" }], false), false);
+  if (c.layout === "wide") {
+    h += choice("Which columns are the groups?", "groups", "Click in the order you want them shown. The first is the reference for differences.", chips("groups", numeric()), false);
+    h += choice("Which column labels each row? (optional)", "subject_col", "Only used to name subjects when the same subjects appear in every column.", select("subject_col", allCols(), "None: rows are just numbered"), false);
+  } else {
+    h += `<div class="grid2"><div><label>Group column ${tag("group_col")}</label>${select("group_col", allCols().filter((x) => levels(x).length >= 2))}</div>
+      <div><label>Measurement column ${tag("value_col")}</label>${select("value_col", numeric())}</div>
+      <div><label>Subject column ${tag("subject_col")} ${c.paired ? "<b>(needed)</b>" : "(optional)"}</label>${select("subject_col", allCols(), "None")}</div></div>`;
+    if (c.group_col) h += choice("Which groups?", "groups", "Click in the order you want them shown. The first is the reference for differences.", chips("groups", levels(c.group_col)), false);
+  }
+  const k = (c.groups || []).length;
+  h += choice("Were the same subjects measured in every group?", "paired", "Repeated measures or matched samples: the same mouse before and after, the same patient at each visit, or cells from one donor split across treatments.",
+    seg("paired", [{ v: false, l: "No, different subjects", s: "unpaired" }, { v: true, l: "Yes, the same subjects", s: "paired / repeated measures" }]));
+  h += choice("Compare averages or ranks?", "method", "Averages (t test, ANOVA) assume roughly bell-shaped values and give a difference with a confidence interval. Ranks (non-parametric) only ask whether one group tends to be higher, and aren't thrown by a few extreme values. Decide this from what you know about the measurement, not from which gives the smaller P.",
+    seg("method", [{ v: "means", l: "Averages", s: "parametric" }, { v: "ranks", l: "Ranks", s: "non-parametric" }]));
+  if (c.method === "means" && c.paired === false) {
+    h += choice(`Assume every group has the same spread? <span class="tag rec">No is safer</span>`, "equal_spread", "The classic t test and ANOVA assume equal standard deviations. The Welch versions don't, and lose almost nothing when spreads happen to be equal.",
+      seg("equal_spread", [{ v: false, l: "No", s: k > 2 ? "Welch's ANOVA, Games-Howell" : "Welch's t test" }, { v: true, l: "Yes", s: k > 2 ? "ordinary ANOVA, Tukey / Dunnett" : "unpaired t test" }]));
+  }
+  if (k > 2) {
+    h += choice("After the overall test, which pairs should be compared?", "followup", "P values are adjusted for the number of comparisons, so fewer comparisons give more power. Choose before looking at the results.",
+      seg("followup", [{ v: "all_pairs", l: "Every pair" }, { v: "vs_control", l: "Each group vs a control" }, { v: "none", l: "None", s: "overall test only" }]));
+    if (c.followup === "vs_control") h += choice("Which group is the control?", "control", "", select("control", c.groups));
+  }
+  h += choice("Were subjects assigned to groups at random?", "assignment", "Only random assignment lets a difference be put down to the treatment. Groups defined by genotype, sex or time point aren't randomised.", seg("assignment", ASSIGN));
+  return h;
+}
+
+function setupContingency() {
+  const c = S.c; let h = "";
+  h += choice("How is the table laid out?", "layout", "", seg("layout", [{ v: "rows", l: "One row per subject", s: "we count them" }, { v: "counts", l: "Already counted", s: "a table of counts" }], false), false);
+  if (c.layout === "rows") {
+    h += `<div class="grid2"><div><label>Groups (rows) ${tag("row_col")}</label>${select("row_col", allCols().filter((x) => levels(x).length >= 2))}</div>
+      <div><label>Outcome (columns) ${tag("col_col")}</label>${select("col_col", allCols().filter((x) => levels(x).length >= 2))}</div></div>`;
+    if (c.row_col) h += choice("Which groups?", "rows", "Click in order. For two groups, the first is compared against the second.", chips("rows", levels(c.row_col)), false);
+    if (c.col_col) h += choice("Which outcomes?", "cols", "", chips("cols", levels(c.col_col)), false);
+  } else {
+    h += `<div class="grid2"><div><label>Column naming each row ${tag("label_col")}</label>${select("label_col", allCols())}</div></div>`;
+    if (c.label_col) h += choice("Which rows (groups)?", "rows", "Click in order. For two groups, the first is compared against the second.", chips("rows", levels(c.label_col)), false);
+    h += choice("Which columns hold the counts?", "cols", "", chips("cols", numeric()), false);
+  }
+  if ((c.rows || []).length === 2 && (c.cols || []).length === 2) {
+    h += choice("Which outcome's risk should be compared?", "event", `Relative risk and odds ratio compare how common this outcome is in <b>${esc(c.rows[0])}</b> against <b>${esc(c.rows[1])}</b>. <button class="linkish" id="swap">⇅ Swap the groups</button>`,
+      seg("event", c.cols.map((x) => ({ v: x, l: x }))));
+  }
+  h += choice("Were subjects assigned to groups at random?", "assignment", "Only random assignment lets a difference be put down to the treatment.", seg("assignment", ASSIGN));
+  return h;
+}
+
+function setupCorrelation() {
+  let h = `<div class="grid2"><div><label>X (across) ${tag("x_col")}</label>${select("x_col", numeric())}</div>
+    <div><label>Y (up) ${tag("y_col")}</label>${select("y_col", numeric())}</div></div>`;
+  h += choice("Which kind of correlation?", "method", "Pearson measures how close the points are to a straight line and assumes roughly bell-shaped values. Spearman works on ranks, so it catches any steady rise or fall and isn't thrown by a few extreme values.",
+    seg("method", [{ v: "pearson", l: "Pearson", s: "straight line" }, { v: "spearman", l: "Spearman", s: "ranks" }]));
+  return h;
+}
+
+function missing() {
+  const c = S.c, out = [];
+  if (S.analysis === "compare_groups") {
+    if (c.layout === "long" && (!c.group_col || !c.value_col)) out.push("the columns");
+    if ((c.groups || []).length < 2) out.push("at least two groups");
+    if (c.paired === undefined) out.push("same subjects?");
+    if (c.method === undefined) out.push("averages or ranks");
+    if (c.method === "means" && c.paired === false && c.equal_spread === undefined) out.push("equal spread?");
+    if ((c.groups || []).length > 2 && c.followup === undefined) out.push("which pairs");
+    if (c.followup === "vs_control" && (c.groups || []).length > 2 && !c.control) out.push("the control");
+    if (c.layout === "long" && c.paired && !c.subject_col) out.push("the subject column");
+    if (!c.assignment) out.push("random assignment?");
+  } else if (S.analysis === "contingency") {
+    if ((c.rows || []).length < 2) out.push("at least two groups");
+    if ((c.cols || []).length < 2) out.push("at least two outcomes");
+    if ((c.rows || []).length === 2 && (c.cols || []).length === 2 && !c.event) out.push("which outcome");
+    if (!c.assignment) out.push("random assignment?");
+  } else {
+    if (!c.x_col || !c.y_col) out.push("both columns");
+    if (!c.method) out.push("Pearson or Spearman");
+  }
+  return out;
+}
+
+function renderSetup() {
+  const make = { compare_groups: setupCompare, contingency: setupContingency, correlation: setupCorrelation }[S.analysis];
+  $("setup").innerHTML = make();
+  const todo = missing();
+  $("check").disabled = todo.length > 0;
+  $("waiting").textContent = todo.length ? `Still to choose: ${todo.join(", ")}.` : "";
+  $("err3").textContent = "";
+  const touched = (key) => { S.guessed.delete(key); hideFrom(4); };
+  $("setup").querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => {
+    const key = b.dataset.seg; S.c[key] = JSON.parse(b.dataset.v); touched(key);
+    if (key === "layout") {
+      const keep = { layout: S.c.layout, assignment: S.c.assignment, paired: S.c.paired, method: S.c.method };
+      Object.keys(keep).forEach((x) => keep[x] === undefined && delete keep[x]);
+      S.c = keep;
+      const g = (S.ds.guesses || {})[S.analysis] || {};
+      if (g.layout === S.c.layout) Object.entries(g).forEach(([x, v]) => { if (v !== null && x !== "layout") { S.c[x] = v; S.guessed.add(x); } });
+      if (S.analysis === "compare_groups" && S.c.layout === "long" && S.c.group_col) { S.c.groups = levels(S.c.group_col); S.guessed.add("groups"); }
+      if (S.analysis === "contingency") fillContingency();
+    }
+    renderSetup();
+  });
+  $("setup").querySelectorAll("[data-sel]").forEach((s) => s.onchange = () => {
+    const key = s.dataset.sel; S.c[key] = s.value || null; touched(key);
+    if (key === "group_col") { S.c.groups = s.value ? levels(s.value) : []; S.guessed.add("groups"); S.c.control = null; }
+    if (key === "row_col") { S.c.rows = s.value ? levels(s.value) : []; S.guessed.add("rows"); S.c.event = undefined; }
+    if (key === "col_col") { S.c.cols = s.value ? levels(s.value) : []; S.guessed.add("cols"); S.c.event = undefined; }
+    if (key === "label_col") { S.c.rows = s.value ? levels(s.value) : []; S.guessed.add("rows"); }
+    renderSetup();
+  });
+  $("setup").querySelectorAll("[data-chip]").forEach((b) => b.onclick = () => {
+    const key = b.dataset.chip, v = b.dataset.v, list = [...(S.c[key] || [])];
+    const i = list.indexOf(v); if (i >= 0) list.splice(i, 1); else list.push(v);
+    S.c[key] = list; touched(key);
+    if (key === "groups" && S.c.control && !list.includes(S.c.control)) S.c.control = null;
+    if (key === "cols" && S.c.event && !list.includes(S.c.event)) S.c.event = undefined;
+    renderSetup();
+  });
+  if ($("swap")) $("swap").onclick = () => { S.c.rows = [S.c.rows[1], S.c.rows[0]]; touched("rows"); renderSetup(); };
+}
+
+function buildSpec() {
+  const c = S.c;
+  if (S.analysis === "compare_groups") {
+    const k = c.groups.length;
+    return { analysis: "compare_groups", layout: c.layout, groups: c.groups, group_col: c.layout === "long" ? c.group_col : null,
+      value_col: c.layout === "long" ? c.value_col : null, subject_col: c.subject_col || null, paired: c.paired, method: c.method,
+      equal_spread: c.method === "means" && !c.paired ? !!c.equal_spread : false, followup: k > 2 ? c.followup : "none",
+      control: k > 2 && c.followup === "vs_control" ? c.control : null, assignment: c.assignment };
+  }
+  if (S.analysis === "contingency") {
+    const two = c.rows.length === 2 && c.cols.length === 2;
+    return { analysis: "contingency", layout: c.layout, row_col: c.layout === "rows" ? c.row_col : null, col_col: c.layout === "rows" ? c.col_col : null,
+      label_col: c.layout === "counts" ? c.label_col : null, rows: c.rows, cols: c.cols, event: two ? c.event : null, assignment: c.assignment };
+  }
+  return { analysis: "correlation", x_col: c.x_col, y_col: c.y_col, method: c.method };
+}
+
+$("check").onclick = async () => {
+  $("err3").textContent = "";
+  busy($("check"), true, "Checking…");
+  try {
+    const rb = await post("/api/science/readback", { dataset_id: S.ds.dataset_id, spec: buildSpec() });
+    S.spec = rb.spec;
+    $("readback").textContent = rb.readback;
+    const guessed = [...S.guessed];
+    $("rbnotes").innerHTML = (guessed.length ? `<div class="note">🔎 Some columns were guessed from your table. Check they're right before running.</div>` : "")
+      + (rb.problem ? `<div class="problem">⛔ This can't run yet: ${esc(rb.problem)}</div>` : "");
+    $("run").disabled = !!rb.problem;
+    $("report").classList.add("hidden");
+    $("s4").classList.remove("hidden");
+    $("s4").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) { $("err3").textContent = "😕 " + e.message; }
+  busy($("check"), false);
+};
+$("back").onclick = () => { $("s4").classList.add("hidden"); $("s3").scrollIntoView({ behavior: "smooth" }); };
+$("run").onclick = async () => {
+  $("err4").textContent = "";
+  busy($("run"), true, "Running…");
+  try { renderReport(await post("/api/science/run", { dataset_id: S.ds.dataset_id, spec: S.spec })); }
+  catch (e) { $("err4").textContent = "😕 " + e.message; }
+  busy($("run"), false);
+};
+
+/* ---------- charts ---------- */
+function niceTicks(lo, hi, n = 5) {
+  const span = hi - lo || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || step0;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toPrecision(12));
+  return out;
+}
+// Must match report.num in Python: 4 significant figures, halves up, trailing zeros dropped.
+const fmt = (x) => x === null || x === undefined ? "n/a" : x === 0 ? "0" : Math.abs(x) >= 1e6 || Math.abs(x) < 1e-3 ? x.toExponential(2) : (+x.toPrecision(4)).toString();
+const short = (s, n = 14) => s.length > n ? s.slice(0, n - 1) + "…" : s;
+
+function groupsChart(r) {
+  const g = r.result.groups, ranks = r.spec.method === "ranks", paired = r.spec.paired;
+  const W = 640, H = 300, L = 58, R = 14, T = 14, B = 42, k = g.length, band = (W - L - R) / k;
+  const vals = g.flatMap((x) => x.values.concat(ranks ? [] : [x.ci_low, x.ci_high]));
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo || 1) * .08; lo -= pad; hi += pad;
+  const ticks = niceTicks(lo, hi); lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+  const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo)), x = (i) => L + band * (i + .5);
+  const jit = (j, n) => paired ? 0 : (((j * 0.6180339) % 1) - .5) * Math.min(band * .5, 60);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Each value by group">`;
+  ticks.forEach((t) => { s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${fmt(t)}</text>`; });
+  s += `<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  if (paired) { const n = g[0].values.length; for (let j = 0; j < n; j++) { s += `<polyline fill="none" stroke="var(--muted)" stroke-opacity=".35" points="${g.map((x0, i) => `${x(i)},${y(x0.values[j])}`).join(" ")}"/>`; } }
+  g.forEach((grp, i) => {
+    const c = COLORS[i % COLORS.length];
+    grp.values.forEach((v, j) => { s += `<circle cx="${x(i) + jit(j)}" cy="${y(v)}" r="4.2" fill="${c}" fill-opacity=".8" stroke="var(--ink)" stroke-width=".8"/>`; });
+    const w = Math.min(band * .32, 34);
+    if (ranks) {
+      s += `<rect x="${x(i) - w}" y="${y(grp.q3)}" width="${2 * w}" height="${Math.max(1, y(grp.q1) - y(grp.q3))}" fill="none" stroke="var(--ink)" stroke-width="1.5" rx="2"/>`;
+      s += `<line x1="${x(i) - w}" x2="${x(i) + w}" y1="${y(grp.median)}" y2="${y(grp.median)}" stroke="var(--ink)" stroke-width="3"/>`;
+    } else {
+      s += `<line x1="${x(i)}" x2="${x(i)}" y1="${y(grp.ci_low)}" y2="${y(grp.ci_high)}" stroke="var(--ink)" stroke-width="1.8"/>`;
+      [grp.ci_low, grp.ci_high].forEach((v) => { s += `<line x1="${x(i) - w / 2}" x2="${x(i) + w / 2}" y1="${y(v)}" y2="${y(v)}" stroke="var(--ink)" stroke-width="1.8"/>`; });
+      s += `<line x1="${x(i) - w}" x2="${x(i) + w}" y1="${y(grp.mean)}" y2="${y(grp.mean)}" stroke="var(--ink)" stroke-width="3"/>`;
+    }
+    s += `<text class="lbl" x="${x(i)}" y="${H - B + 18}" text-anchor="middle">${esc(short(grp.name))}</text><text x="${x(i)}" y="${H - B + 33}" text-anchor="middle">n = ${grp.n}</text>`;
+  });
+  s += `<text x="14" y="${(H - B) / 2}" transform="rotate(-90 14 ${(H - B) / 2})" text-anchor="middle">${esc(short(r.spec.value_col || "value", 30))}</text></svg>`;
+  const cap = ranks ? "Each dot is one value. Thick line: median. Box: middle half of the values." : "Each dot is one value. Thick line: mean. Whiskers: 95% confidence interval of the mean.";
+  return `<div class="fig">${s}<div class="cap"><b>Fig. 1</b> ${cap}${paired ? " Grey lines join the same subject." : ""}</div></div>`;
+}
+
+function tableChart(r) {
+  const res = r.result, W = 640, rowH = 34, L = 130, R = 14, H = res.rows.length * rowH + 40;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of each outcome by group">`;
+  res.rows.forEach((name, i) => {
+    let x0 = L; const y0 = 10 + i * rowH;
+    s += `<text class="lbl" x="${L - 10}" y="${y0 + 18}" text-anchor="end">${esc(short(name, 18))}</text>`;
+    res.row_percent[i].forEach((p, j) => {
+      const w = (W - L - R) * p;
+      s += `<rect x="${x0}" y="${y0}" width="${w}" height="${rowH - 10}" fill="${COLORS[j % COLORS.length]}" stroke="var(--ink)" stroke-width=".8"/>`;
+      if (w > 44) s += `<text x="${x0 + w / 2}" y="${y0 + 17}" text-anchor="middle" style="fill:#fff;font-weight:800">${Math.round(p * 100)}%</text>`;
+      x0 += w;
+    });
+  });
+  let lx = L; const ly = H - 14;
+  res.cols.forEach((c, j) => { s += `<rect x="${lx}" y="${ly - 10}" width="12" height="12" fill="${COLORS[j % COLORS.length]}" stroke="var(--ink)" stroke-width=".8"/><text x="${lx + 17}" y="${ly}">${esc(short(c, 18))}</text>`; lx += 30 + Math.min(c.length, 18) * 7; });
+  return `<div class="fig">${s}</svg><div class="cap"><b>Fig. 1</b> Share of each outcome within each group.</div></div>`;
+}
+
+function scatterChart(r) {
+  const res = r.result, W = 640, H = 320, L = 58, R = 14, T = 14, B = 44;
+  const xs = res.x, ys = res.y;
+  const xt = niceTicks(Math.min(...xs), Math.max(...xs)), yt = niceTicks(Math.min(...ys), Math.max(...ys));
+  const x0 = Math.min(xt[0], ...xs), x1 = Math.max(xt[xt.length - 1], ...xs), y0 = Math.min(yt[0], ...ys), y1 = Math.max(yt[yt.length - 1], ...ys);
+  const X = (v) => L + (W - L - R) * (v - x0) / (x1 - x0 || 1), Y = (v) => T + (H - T - B) * (1 - (v - y0) / (y1 - y0 || 1));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Scatter plot">`;
+  yt.forEach((t) => { s += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${L - 8}" y="${Y(t) + 4}" text-anchor="end">${fmt(t)}</text>`; });
+  xt.forEach((t) => { s += `<text x="${X(t)}" y="${H - B + 18}" text-anchor="middle">${fmt(t)}</text>`; });
+  s += `<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  const e = res.effect;
+  if (e.slope !== undefined && e.slope !== null) s += `<line x1="${X(x0)}" y1="${Y(e.intercept + e.slope * x0)}" x2="${X(x1)}" y2="${Y(e.intercept + e.slope * x1)}" stroke="var(--pink)" stroke-width="2.5" stroke-dasharray="6 4"/>`;
+  xs.forEach((v, i) => { s += `<circle cx="${X(v)}" cy="${Y(ys[i])}" r="4.5" fill="var(--teal)" fill-opacity=".8" stroke="var(--ink)" stroke-width=".8"/>`; });
+  s += `<text class="lbl" x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle">${esc(r.spec.x_col)}</text>`;
+  s += `<text class="lbl" x="14" y="${(H - B) / 2}" transform="rotate(-90 14 ${(H - B) / 2})" text-anchor="middle">${esc(short(r.spec.y_col, 30))}</text></svg>`;
+  return `<div class="fig">${s}<div class="cap"><b>Fig. 1</b> Each dot is one sample.${e.slope !== undefined ? " Dashed line: best straight line (least squares)." : ""}</div></div>`;
+}
+
+/* ---------- report ---------- */
+const STATUS = { pass: "✅", warn: "⚠️", fail: "❌", info: "💡" }, ASSUME = { ok: "✅", warn: "⚠️", manual: "🙋" };
+function groupTable(r) {
+  const ranks = r.spec.method === "ranks";
+  return `<div class="scroll"><table><thead><tr><th>Group</th><th>n</th>${ranks ? "<th>Median</th><th>25th–75th pct</th><th>Min–max</th>" : "<th>Mean</th><th>SD</th><th>SEM</th><th>95% CI of mean</th>"}</tr></thead><tbody>
+    ${r.result.groups.map((g) => `<tr><td>${esc(g.name)}</td><td class="num">${g.n}</td>${ranks ? `<td class="num">${fmt(g.median)}</td><td class="num">${fmt(g.q1)} – ${fmt(g.q3)}</td><td class="num">${fmt(g.min)} – ${fmt(g.max)}</td>`
+      : `<td class="num">${fmt(g.mean)}</td><td class="num">${fmt(g.sd)}</td><td class="num">${fmt(g.sem)}</td><td class="num">${fmt(g.ci_low)} to ${fmt(g.ci_high)}</td>`}</tr>`).join("")}</tbody></table></div>`;
+}
+function pairTable(r) {
+  const p = r.result.pairs; if (!p || !p.length) return "";
+  const ci = p.some((x) => x.ci_low !== null);
+  const ranks = r.spec.method === "ranks";
+  return `<h4>Which pairs differ? <span class="muted" style="font:600 13px var(--sans)">${esc(r.result.pair_method)}</span></h4><div class="scroll"><table><thead><tr><th>Comparison</th><th>${ranks ? "Median diff." : "Mean diff."}</th>${ci ? "<th>95% CI (adjusted)</th>" : ""}<th>Adjusted P</th><th>Clear?</th></tr></thead><tbody>
+    ${p.map((x) => `<tr class="${x.clear ? "clear" : ""}"><td>${esc(x.b)} − ${esc(x.a)}</td><td class="num">${fmt(x.diff)}</td>${ci ? `<td class="num">${fmt(x.ci_low)} to ${fmt(x.ci_high)}</td>` : ""}<td class="num">${x.p_adj < 0.0001 ? "< 0.0001" : x.p_adj.toFixed(4)}</td><td>${x.clear ? "Yes" : "No"}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function countTable(r) {
+  const res = r.result;
+  return `<div class="scroll"><table><thead><tr><th></th>${res.cols.map((c) => `<th>${esc(c)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+    ${res.rows.map((name, i) => `<tr><td>${esc(name)}</td>${res.counts[i].map((n, j) => `<td class="num">${n} <span class="muted">(${(res.row_percent[i][j] * 100).toFixed(1)}%)</span></td>`).join("")}<td class="num">${res.counts[i].reduce((a, b) => a + b, 0)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderReport(r) {
+  const face = r.verdict === "clear_difference" ? "🔬" : "🤷";
+  const chart = r.analysis === "compare_groups" ? groupsChart(r) : r.analysis === "contingency" ? tableChart(r) : scatterChart(r);
+  let h = `<p class="step">Step 05 · the result</p>
+    <div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h3>${esc(r.headline)}</h3><p>${esc(r.answer)}</p><p class="muted">${esc(r.how_sure)}</p></div></div>
+    <div class="causal">${esc(r.causal_label)}</div>
+    ${chart}
+    <h4>Results</h4><table class="results"><tbody>${r.results.map((f) => `<tr><td>${esc(f.label)}</td><td class="v">${esc(f.value)}</td></tr>`).join("")}</tbody></table>
+    ${r.analysis === "compare_groups" ? `<h4>The groups</h4>${groupTable(r)}${pairTable(r)}` : r.analysis === "contingency" ? `<h4>The counts</h4>${countTable(r)}` : ""}
+    <div class="why"><b>Why this test (${esc(r.method_name)})?</b> ${esc(r.method_why)}</div>
+    ${r.checks.length ? `<h4>Checks</h4>${r.checks.map((c) => `<div class="item"><span class="s">${STATUS[c.status]}</span><span><b>${esc(c.name)}</b>${esc(c.message)}</span></div>`).join("")}` : ""}
+    <h4>What this can't tell you</h4><ul class="plain">${r.cannot_tell.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+    <div class="tabbar"><button class="tab on" data-t="ass">🙋 Assumptions</button><button class="tab" data-t="num">🔢 Every number</button><button class="tab" data-t="rep">♻️ Reproduce</button></div>
+    <div data-p="ass">${r.assumptions.map((a) => `<div class="item"><span class="s">${ASSUME[a.status]}</span><span>${esc(a.text)}</span></div>`).join("")}
+      <p class="muted" style="font-size:13px">✅ checked in the data and looks fine · ⚠️ checked, and there's a concern · 🙋 the data can't tell: you confirm it</p></div>
+    <div data-p="num" class="hidden audit">${r.audit.map((a) => `<div class="item"><span class="s">·</span><span><b>${esc(a.label)}: <span style="font-family:var(--mono)">${esc(a.value)}</span></b>${esc(a.plain)}<div class="tech">${esc(a.technical)} In the script: <code>${esc(a.code)}</code></div></span></div>`).join("")}</div>
+    <div data-p="rep" class="hidden">
+      <p>Same file + same choices + same versions = the same numbers, every time. ${r.repro.random_steps === "none" ? "Nothing in this analysis is random." : esc(r.repro.random_steps) + "."}</p>
+      <div class="fp">Data fingerprint (sha256): ${esc(r.repro.data_sha256)}<br>Built with: ${Object.entries(r.repro.versions).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(", ")}</div>
+      ${r.prep.length ? `<p>Tidying applied before the analysis (also in the script):</p><ul class="plain">${r.prep.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+      <div class="row"><a class="btn soft small" href="/api/science/datasets/${encodeURIComponent(S.ds.dataset_id)}/data" download="${esc(r.data_name)}">⬇️ Data file</a><button class="btn soft small" id="dl">⬇️ Script (.py)</button><button class="btn soft small" id="copy">📋 Copy script</button><span id="copied" class="muted" aria-live="polite"></span></div>
+      <p class="muted" style="font-size:13px">Put the script next to the data file and run <code>python reproduce.py</code>. It refuses to run on a different file.</p>
+      <pre>${esc(r.script)}</pre></div>
+    <div class="row"><button class="btn" id="again">🔁 Ask another question of this data</button></div>`;
+  $("report").innerHTML = h;
+  $("report").classList.remove("hidden");
+  $("report").querySelectorAll(".tab").forEach((t) => t.onclick = () => {
+    $("report").querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
+    $("report").querySelectorAll("[data-p]").forEach((p) => p.classList.toggle("hidden", p.dataset.p !== t.dataset.t));
+  });
+  $("dl").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([r.script], { type: "text/x-python" })); a.download = "reproduce.py"; a.click(); };
+  $("copy").onclick = async () => { try { await navigator.clipboard.writeText(r.script); $("copied").textContent = "Copied."; } catch { $("copied").textContent = "Couldn't copy: select the script below instead."; } };
+  $("again").onclick = () => { hideFrom(3); S.analysis = null; renderQuestions(); $("s2").scrollIntoView({ behavior: "smooth" }); };
+  $("report").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+</script>
+</body>
+</html>

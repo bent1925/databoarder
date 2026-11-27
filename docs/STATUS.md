@@ -3,7 +3,7 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-25
+**Last updated:** 2026-11-26
 
 ## How we work
 
@@ -13,6 +13,15 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 ## Right now
 
+- **Science mode (branch `science-mode`, PR open, 2026-11-26).** Ben asked to try a mode for scientific analysis,
+  with a more scientific but still playful style and the analyses GraphPad Prism offers. Phase 1 is built: a separate
+  page at `/science` with a lab-notebook look, covering Prism's column and contingency tables (t tests, one-way and
+  repeated-measures ANOVA with follow-up tests, rank-based tests, Fisher's exact test, chi-square, correlation).
+  The reproduction script contains the engine word for word and is tested against the report.
+  The campaign screens are unchanged apart from a link. 376 tests pass, 11 of them browser tests.
+  Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
+  **Next:** Ben tries it. Still ask the potential customer which Prism analyses they run each month, and reorder
+  phases 2–9 to match.
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6), and question
   recommender phase 1 (PR #8, labelled cases and the scoring harness, no app change), all reviewed by Codex.
   All 315 tests pass, including 7 browser tests.

@@ -24,6 +24,7 @@ from .prep import prepare
 from .proposer import ProposalError, propose
 from .recipe_ops import RecipeError
 from .schemas import ObservationalSpec
+from .science.routes import router as science_router
 from .security import PasswordGate
 from .sources import SourceStore
 from .translator import design_options, interpret, profile_columns, readback, suggest_questions
@@ -37,6 +38,7 @@ MAX_BYTES = 25 * 1024 * 1024
 MAX_DATASETS = 40
 DATASETS: "OrderedDict[str, dict]" = OrderedDict()
 SOURCES = SourceStore()
+app.include_router(science_router)
 
 
 class AskBody(BaseModel):
@@ -347,6 +349,11 @@ def healthz():
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/science")
+def science():
+    return FileResponse(STATIC / "science.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
