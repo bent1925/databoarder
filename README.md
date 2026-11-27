@@ -4,6 +4,12 @@
 
 Ask a business question, upload a CSV, and get a plain-language answer with the checks behind it. Every report comes with a script that reproduces each number from the raw file. Covers A/B tests, before/after changes (with or without a comparison group), and comparisons where people chose for themselves.
 
+## Status (November 2026)
+A working demo. The analyses, the one-screen combine flow and its browser tests are done.
+In progress: AI suggestions for the combine screen's answers, and better ranking of the ready-made questions
+(today a well-fitting one is in the top 3 for 38% of test cases). Not yet suitable for real customer data: there
+is one shared password, and uploads are kept in memory. Science mode for lab data (`/science`) is a first try, merged 2026-11-27. Details and next steps: [docs/STATUS.md](docs/STATUS.md).
+
 ## How it works, step by step
 1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed. If you have several files or a messy Excel export, use **Put them together first** (see [Putting files together](#putting-files-together-appcombinepy)): add everything your analyst sent, check a few numbers about the finished table, and answer the few choices that change the answer. Nothing is used until you've confirmed them.
 2. **How careful do you need to be?** The method is the same every time. Higher levels add more double-checks.
@@ -16,10 +22,14 @@ Ask a business question, upload a CSV, and get a plain-language answer with the 
 **What the AI does and doesn't do:** it turns a typed question into the form in step 5 and, in the step-by-step file builder, suggests steps if you ask. On the one-screen combine flow, the suggested answers come from fixed code. It sees column names, types, row counts and up to six example values per column, with IDs, emails and phone numbers masked to show only their format. It never sees your rows, and suggested steps do nothing until you confirm them. All statistics come from fixed, tested code.
 
 ## Screenshots
-(Synthetic sample data with planted answers; see `sample_data/` and `tools/`.)
+(Synthetic sample data with planted answers; see `sample_data/` and `tools/`. Retake them with
+`python tools/take_screenshots.py`.)
 
 **Set-up: the "How did people get it?" step picks the method**
 ![Setup](docs/screenshots/1-setup.png)
+
+**Putting files together: a messy pull, checked against a few numbers, with four choices to confirm**
+![Combine screen](docs/screenshots/5-combine.png)
 
 **Comparison group (difference-in-differences), "Right answer" mode with cross-checks**
 ![Comparison group report](docs/screenshots/3-comparison-group-report.png)
@@ -78,6 +88,21 @@ phase 1 of a question recommender: [docs/plans/recommender.md](docs/plans/recomm
 - Same data in, identical report out (fixed seed).
 - The downloadable script stops if the original files or the rebuilt table don't match what the report used.
 - Browser tests (Playwright, `tests/browser/`) drive the combine screen end to end.
+
+## Science mode (`/science`, app/science/)
+A separate page for lab data, styled like a lab notebook. It's a first try at serving scientists who use GraphPad
+Prism. Paste cells, or upload a CSV laid out one column per group or one row per measurement, or upload an Excel workbook
+with one sheet per group (animals down the side, days across). Workbooks are read by fixed rules: blank sheets are
+ignored, and anything inferred (a missing day label, a misspelt group name) is listed for one click of confirmation
+before anything runs. Then pick a question
+(do groups differ, how do groups change over time, are categories related, do two measurements move together) and answer the design questions:
+same subjects?, averages or ranks?, equal spread?, which pairs?, random assignment? Those answers decide the test:
+t tests, Welch's or ordinary one-way ANOVA with Tukey, Dunnett or Games-Howell, repeated-measures ANOVA with the
+Greenhouse-Geisser correction, two-way repeated-measures ANOVA for time courses (group × day), Mann-Whitney, Kruskal-Wallis with Dunn, Wilcoxon, Friedman, Fisher's exact test with
+relative risk and odds ratio, chi-square, Pearson and Spearman. No AI is involved. The engine (`app/science/engine.py`)
+is copied word for word into the downloadable script, and the tests check that the script reproduces every number.
+Samples with planted answers: `static/science/` (made by `tools/make_science_samples.py`). Plan and later phases
+(two-way ANOVA, curve fits, survival, figures): [docs/plans/science-mode.md](docs/plans/science-mode.md).
 
 ## Analyses
 - **A/B test** (`app/ab_test.py`): two groups shown different versions at the same time.

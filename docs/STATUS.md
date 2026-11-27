@@ -3,7 +3,7 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-25
+**Last updated:** 2026-11-27
 
 ## How we work
 
@@ -13,9 +13,30 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 ## Right now
 
-- **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6), and question
+- **Science mode (merged to `main` in PR #14, 2026-11-27, after two rounds of Codex review).** Ben asked to try a mode for
+  scientific analysis, with a more scientific but still playful style and the analyses GraphPad Prism offers. It's a
+  separate page at `/science` with a lab-notebook look. The campaign screens are unchanged apart from a link.
+  414 tests pass, 13 of them browser tests. Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
+  What's in it:
+  - **Analyses:** t tests, one-way ANOVA (Welch's or ordinary) with Tukey, Dunnett or Games-Howell,
+    repeated-measures ANOVA, rank-based tests, Fisher's exact test, chi-square, correlation.
+  - **Excel workbooks with one sheet per group** (animals down, days across) are read by fixed rules with one
+    confirmation click. Blank sheets are ignored, and anything inferred is listed for checking.
+  - **Time courses:** two-way repeated-measures ANOVA (group × day, Greenhouse-Geisser) with Holm-adjusted
+    comparisons at each day. Groups can also be compared on one chosen day.
+  - The reproduction script contains the engine (and the workbook reader) word for word, and is tested against
+    the report.
+  Ben's own workbook (`sample_data/House comparison LA.xlsx`) runs end to end. It isn't in git, and its contents and
+  results are deliberately kept out of the repo, which is public.
+  **Next for science mode, each in its own PR (Ben, 2026-11-26):**
+  1. Mixed-effects models, so animals with a missing day are kept instead of left out.
+  2. Ordinary two-way ANOVA without repeated measures.
+  3. Analysing the logarithm of a measurement, as a choice made before running (for skewed values like volumes).
+  4. A check that groups vary alike over time (currently a "you confirm" assumption).
+  Then ask the potential customer which Prism analyses they run each month, and reorder phases 3–9 to match.
+- **Branch:** `main`. Also merged: phases 1 and 2 of the one-screen combine flow (PRs #5 and #6) and question
   recommender phase 1 (PR #8, labelled cases and the scoring harness, no app change), all reviewed by Codex.
-  All 315 tests pass, including 7 browser tests.
+  All 414 tests pass on `main`, including 13 browser tests.
 - **Recommender baseline:** `.venv/bin/python -m evals.recommender`. Labels reviewed by Ben (2026-11-17 and 18,
   branch `review-checkout-labels`). Against them, today's suggestions (Baseline A) put a well-fitting question in
   the top 3 for 38% of cases (37% with renamed columns), and never say "can't answer". Weakest: LaLonde 6%,
@@ -25,7 +46,7 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   when people chose the program, a goal about its effect needs the "compare similar people" method, and a plain
   difference gets no credit; in an experiment, "do X customers do more than Y?" wants the effect compared across
   X and Y (`effect_by`), which the app can't suggest yet. The labelled cases are a test, never training data.
-- **README** brought up to date with `main` (PR #9, merged 2026-11-14).
+- **README** brought up to date with `main` (PR #9, merged 2026-11-14), and given a short status section (2026-11-25).
 - **Next after that:** recommender phase 2, or phase 3 of the combine flow (AI suggestions for the combine
   screen's answers, see [plans/combine-flow.md](plans/combine-flow.md)). The order isn't decided.
 
@@ -89,11 +110,13 @@ Not yet planned or ordered against "Next up". Each needs a plan in `docs/plans/`
 1. **A version of the screens for biomedical researchers and scientists.** Their words, examples and defaults
    (e.g. "treatment arm", "outcome", study designs instead of campaigns), probably with more of the technical
    detail shown by default.
-   **They use GraphPad Prism today.** Databoarder can't replace it yet: of what labs usually use Prism for, it only
-   covers comparing two groups. Missing: more than two groups (ANOVA with corrected follow-up tests), paired and
-   repeated-measures data (a table must be one row per person now), dose-response curve fits, survival curves,
-   non-parametric tests, small hand-entered datasets, and graphs for papers (item 2). Pitch it as "the right
-   test, explained and reproducible", not as a Prism replacement. **Ask them first:** which Prism analyses do
+   **First try built:** science mode (`/science`, merged in PR #14; see "Right now"), with a lab-notebook look.
+   **They use GraphPad Prism today.** When this was written, Databoarder only covered comparing two groups. Science
+   mode adds more than two groups (ANOVA with corrected follow-up tests), paired and repeated-measures data
+   (including two-way repeated-measures ANOVA for time courses), non-parametric tests, contingency tables,
+   correlation, pasted small datasets, and Excel workbooks with one sheet per group. Still missing: dose-response
+   curve fits, survival curves, regression, and graphs for papers (item 2). Pitch it as "the right test, explained
+   and reproducible", not as a Prism replacement. **Ask them first:** which Prism analyses do
    they actually run each month? That shows whether this is a few new analyses or a different product.
 2. **Graphs ready for a manuscript.** Figures to drop into a paper, drawn by fixed code from the same frozen
    table and approved choices as the report, with exportable vector files and the script that redraws them.
@@ -113,6 +136,11 @@ connections, and monthly reruns with the same choices.
 
 ## Waiting on you
 
+- **Study details already on GitHub (2026-11-26).** The repo is public. Science-mode commits, now in `main`'s
+  history too, include the group names and file name from Ben's workbook (no measurements). Decide whether to leave
+  them, remove them from the current files, or make the repo private. Rewriting history would now mean force-pushing
+  `main`.
+- **A question about the workbook's baseline values,** raised in the session, for whoever made the file.
 - **Real-model test of AI suggestions.** Needs an API key and costs money. Run
   `ANTHROPIC_API_KEY=… .venv/bin/python -m evals.recipe_cases`, or give me the key.
 - **Deployment for real customer data.** One shared password isn't suitable. Options: a separate deployment
