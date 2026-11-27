@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import csv
-import re
 import hashlib
 import io
+import re
 import uuid
 from collections import OrderedDict
-from typing import Optional
+from typing import Literal, Optional
 
 import pandas as pd
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -31,8 +31,9 @@ class PasteBody(BaseModel):
 
 
 class RereadBody(BaseModel):
-    keep_spelling: bool = False
+    keep_spelling: Optional[bool] = None
     sheet: Optional[str] = None
+    first_row: Optional[Literal["labels", "values"]] = None
 
 
 class SpecBody(BaseModel):
@@ -239,11 +240,13 @@ def confirm(dataset_id: str):
 
 @router.post("/api/science/datasets/{dataset_id}/reread")
 def reread(dataset_id: str, body: RereadBody):
-    """Reads the same workbook again with a different option (keep the sheet's spelling, or use another sheet)."""
+    """Reads the same workbook again with a changed option (keep the sheet's spelling, use another sheet, or read a
+    first row of numbers the other way). Options chosen earlier are kept."""
     ds = _get(dataset_id)
     if not ds.get("workbook"):
         raise HTTPException(400, "Only workbooks can be read again.")
-    return _store_workbook(ds["raw"], ds["name"], body.model_dump(exclude_defaults=True))
+    options = {**ds["workbook"]["options"], **body.model_dump(exclude_none=True)}
+    return _store_workbook(ds["raw"], ds["name"], options)
 
 
 def _ready(ds: dict) -> None:

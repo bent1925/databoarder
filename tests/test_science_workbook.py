@@ -225,3 +225,97 @@ def test_the_house_comparison_workbook():
     assert len(summary["checks"]) == 2          # Table 7's missing day labels, and Table 6's "25mg/lg + tala"
     table = sheets.build_table(REAL.read_bytes(), found["plan"])
     assert table.shape == (125, 4) and table["Value"].notna().all()
+
+
+# ---------------------------------------------------------------------------- from the Codex review of PR #14
+
+def book_of(fill) -> bytes:
+    book = openpyxl.Workbook()
+    book.remove(book.active)
+    fill(book)
+    out = io.BytesIO()
+    book.save(out)
+    return out.getvalue()
+
+
+def numeric_days(book, word="Day"):
+    for g in ("Ctrl", "Drug"):
+        ws = book.create_sheet(g)
+        ws.append([word, 1, 4, 8])
+        for a in range(3):
+            ws.append([f"{g}{a}", 2.1 + a, 2.55 + a, 3.05 + a])
+
+
+def test_a_first_row_of_day_numbers_is_read_as_labels_and_shown_for_checking():
+    raw = book_of(numeric_days)
+    found = workbook.propose(raw)
+    summary = found["summary"]
+    assert summary["times"] == [1, 4, 8] and summary["time_name"] == "Day" and summary["first_row"] == "labels"
+    assert any("Row 1 on Ctrl and Drug (1, 4, 8) is read as labels" in c for c in summary["checks"])
+    table = sheets.build_table(raw, found["plan"])
+    assert len(table) == 2 * 3 * 3 and "Day" not in set(table["Animal"])     # no fabricated animal
+    flipped = workbook.propose(raw, {"first_row": "values"})["summary"]
+    assert flipped["subjects_per_group"] == [4, 4] and flipped["first_row"] == "values"
+
+
+def test_the_same_rising_row_on_every_sheet_counts_as_labels_without_a_header_word():
+    def fill(book):
+        for g in ("Ctrl", "Drug"):
+            ws = book.create_sheet(g)
+            ws.append([None, 1, 4, 8])
+            for a in range(3):
+                ws.append([g if a == 0 else None, 2 + a, 3 + a, 4 + a])
+    found = workbook.propose(book_of(fill))
+    assert found["summary"]["times"] == [1, 4, 8] and found["summary"]["subjects_per_group"] == [3, 3]
+
+
+def test_measurements_that_happen_to_rise_are_not_taken_for_labels():
+    def fill(book):
+        for g in ("Ctrl", "Drug"):
+            ws = book.create_sheet(g)
+            for a in range(3):
+                ws.append([g if a == 0 else None, 2.1 + a, 2.6 + a, 3.4 - a])
+    found = workbook.propose(book_of(fill))
+    assert found["summary"]["subjects_per_group"] == [3, 3] and found["summary"]["first_row"] in (None, "values")
+
+
+def test_an_animal_with_no_numbers_is_kept_counted_and_listed():
+    def fill(book):
+        for g in ("Ctrl", "Drug"):
+            ws = book.create_sheet(g)
+            ws.append(["Mouse", "Day 1", "Day 4"])
+            ws.append(["m1", 2, 3])
+            ws.append(["m2", "dead", None])
+            ws.append(["m3", 2.5, 3.1])
+            ws.append(["m4", 2.2, 2.9])
+            ws.append(["m5", None, None])                  # last row, label only
+    raw = book_of(fill)
+    found = workbook.propose(raw)
+    assert found["summary"]["subjects_per_group"] == [5, 5]
+    checks = found["summary"]["checks"]
+    assert any("row 3 (m2) has no numbers" in c for c in checks) and any("row 6 (m5) has no numbers" in c for c in checks)
+    table = sheets.build_table(raw, found["plan"])
+    spec = dict(analysis="time_course", group_col="Group", time_col="Day", value_col="Value", subject_col="Animal",
+                groups=["Ctrl", "Drug"], times=["1", "4"], followup="none")
+    r = engine.run(table, spec)
+    assert r["left_out"]["incomplete_subjects"] == 4 and [m["n"] for m in r["means"]] == [3, 3]
+
+
+def test_an_ordinary_sheet_keeps_every_column():
+    def fill(book):
+        ws = book.create_sheet("Data")
+        ws.append(["Subject", "Group", "Day", "Value", "Note"])
+        for i in range(6):
+            ws.append([f"s{i // 2}", "A" if i < 4 else "B", 1 + 3 * (i % 2), 2.0 + i, "ok"])
+    raw = book_of(fill)
+    table = sheets.build_table(raw, workbook.propose(raw)["plan"])
+    assert list(table.columns) == ["Subject", "Group", "Day", "Value", "Note"]
+    assert table["Subject"].tolist() == ["s0", "s0", "s1", "s1", "s2", "s2"]
+    assert pd.api.types.is_numeric_dtype(table["Value"]) and not pd.api.types.is_numeric_dtype(table["Note"])
+
+
+def test_reading_again_keeps_earlier_choices():
+    d = upload_book()
+    kept = client.post(f"/api/science/datasets/{d['dataset_id']}/reread", json={"keep_spelling": True}).json()
+    again = client.post(f"/api/science/datasets/{kept['dataset_id']}/reread", json={"first_row": "values"}).json()
+    assert "drug 25mg/lg" in [g["name"] for g in again["workbook"]["groups"]]

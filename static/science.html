@@ -303,7 +303,11 @@ function workbookHtml(d) {
     h += `<p style="font-size:14px">Use sheet: <select id="wbsheet">${[w.sheet, ...w.other_sheets].map((n) => `<option ${n === w.sheet ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></p>`;
   }
   if (w.checks.length) h += `<p style="margin:10px 0 2px;font-weight:800">${ok ? "You checked" : "Please check"}:</p>${list(w.checks, "⚠️")}`;
-  if (w.checks.some((t) => t.includes("Using '"))) h += `<p style="font-size:13.5px;margin:6px 0"><button class="linkish" id="wbkeep">Keep each sheet's own spelling instead</button></p>`;
+  const switches = [];
+  if (w.checks.some((t) => t.includes("Using '"))) switches.push(`<button class="linkish" id="wbkeep">Keep each sheet's own spelling instead</button>`);
+  if (w.first_row === "labels") switches.push(`<button class="linkish" id="wbfirst" data-v="values">That first row is measurements, not labels</button>`);
+  if (w.first_row === "values") switches.push(`<button class="linkish" id="wbfirst" data-v="labels">That first row is column labels</button>`);
+  if (switches.length) h += `<p style="font-size:13.5px;margin:6px 0">${switches.join(" · ")}</p>`;
   h += list(w.assumptions, "🙋") + list(w.notes, "💡");
   if (w.skipped.length) h += list(["Ignored: " + w.skipped.map((x) => `${x.sheet} (${x.why})`).join(", ") + "."], "🗑️");
   h += `<div class="row">${ok ? `<span class="done">✅ Checked</span>` : `<button class="btn" id="wbok">✅ That's right</button>`}
@@ -320,6 +324,7 @@ function bindWorkbook(d) {
   };
   if ($("wbok")) $("wbok").onclick = async () => { await go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/confirm`, {}); if (!$("s2").classList.contains("hidden")) $("s2").scrollIntoView({ behavior: "smooth", block: "start" }); };
   if ($("wbkeep")) $("wbkeep").onclick = () => go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/reread`, { keep_spelling: true });
+  if ($("wbfirst")) $("wbfirst").onclick = (e) => go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/reread`, { first_row: e.target.dataset.v });
   if ($("wbsheet")) $("wbsheet").onchange = (e) => go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/reread`, { sheet: e.target.value });
 }
 

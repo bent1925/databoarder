@@ -108,6 +108,7 @@ def tidy_groups(df: pd.DataFrame, spec: dict) -> tuple[pd.DataFrame, dict]:
 
     left_out = {"empty_values": {g: int(long.loc[long["group"] == g, "value"].isna().sum()) for g in groups},
                 "incomplete_subjects": 0, "rows_kept": kept}
+    everyone = long["subject"].dropna().unique()        # including subjects whose every value is empty
     long = long.dropna(subset=["value"])
     if spec.get("paired"):
         if long["subject"].isna().any():
@@ -117,7 +118,7 @@ def tidy_groups(df: pd.DataFrame, spec: dict) -> tuple[pd.DataFrame, dict]:
             row = long[repeats].iloc[0]
             raise EngineError(f"Subject '{row['subject']}' has more than one value for '{row['group']}'. "
                               "Repeated measurements need exactly one value per subject in each group.")
-        counts = long.groupby("subject")["group"].nunique()
+        counts = long.groupby("subject")["group"].nunique().reindex(everyone, fill_value=0)
         complete = counts[counts == len(groups)].index
         left_out["incomplete_subjects"] = int((counts < len(groups)).sum())
         long = long[long["subject"].isin(complete)]
@@ -584,10 +585,11 @@ def time_course(df: pd.DataFrame, spec: dict) -> dict:
         row = long[repeats].iloc[0]
         raise EngineError(f"'{row['subject']}' has more than one value at {spec['time_col']} {row['time']}.")
     empty = int(long["value"].isna().sum())
-    long = long.dropna(subset=["value"])
+    # Pivot before dropping empty values, so a subject with no values at all still counts as incomplete.
     wide = long.pivot(index="subject", columns="time", values="value").reindex(columns=times)
     complete = wide.dropna()
     home = long.drop_duplicates("subject").set_index("subject")["group"]
+    long = long.dropna(subset=["value"])
     left_out = {"empty_values": empty, "incomplete_subjects": int(len(wide) - len(complete)),
                 "incomplete_by_group": {g: int(((home.reindex(wide.index) == g) & wide.isna().any(axis=1)).sum())
                                         for g in groups}}

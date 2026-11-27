@@ -25,6 +25,10 @@ TIME = re.compile(r"^\s*(day|d|week|wk|w|hour|hr|h|minute|min|month|mo|time|t)s?
 UNITS = {"day": "Day", "d": "Day", "week": "Week", "wk": "Week", "w": "Week", "hour": "Hour", "hr": "Hour",
          "h": "Hour", "minute": "Minute", "min": "Minute", "month": "Month", "mo": "Month", "time": "Time", "t": "Time"}
 TITLE = re.compile(r"^\s*(table|sheet|data)\s*\d*\s*$", re.I)
+# Words that label a header row ("Animal  1  4  8", "Day  0  7  14").
+HEADER_WORD = re.compile(r"^\s*(animal|mouse|mice|rat|subject|patient|sample|id|day|time|week|hour|hr|h|min|minute|"
+                         r"month|visit|dose|conc|concentration|group|treatment|condition|timepoint|time point)s?"
+                         r"\s*(\(.*\))?\s*(no\.?|#|id)?\s*:?\s*$", re.I)
 
 
 class WorkbookError(ValueError):
@@ -44,6 +48,10 @@ class Sheet:
     label_col: Optional[int] = None
     title: Optional[str] = None
     not_numbers: list[tuple[str, str]] = field(default_factory=list)
+    no_numbers: list[tuple[int, Optional[str]]] = field(default_factory=list)   # subject rows with no values at all
+    candidate: Optional[dict] = None          # a first row of numbers that may be labels (1, 4, 8) rather than values
+    header_from_numbers: bool = False
+    cells: dict = field(default_factory=dict, repr=False)
 
 
 def _text(v) -> Optional[str]:
@@ -53,7 +61,31 @@ def _text(v) -> Optional[str]:
     return s or None
 
 
-def read_sheet(ws) -> Sheet:
+def _numeric_header(cells: dict, numeric: set) -> Optional[dict]:
+    """The first row of numbers, when it could be labels rather than measurements: no text above it in those columns,
+    rows of numbers below it, and values that rise steadily (1, 4, 8). `likely` says whether there's a further sign:
+    a header word beside it ("Animal", "Day"), or whole numbers above measurements that aren't whole."""
+    r0 = min(r for r, _ in numeric)
+    cols0 = sorted(c for r, c in numeric if r == r0)
+    all_cols = {c for _, c in numeric}
+    if len(cols0) < 2 or not any(r > r0 for r, _ in numeric):
+        return None
+    if any(r < r0 and c in all_cols for (r, c) in cells):
+        return None                                            # there's already a header above the numbers
+    values = [number(cells[(r0, c)]) for c in cols0]
+    if any(b <= a for a, b in zip(values, values[1:])):
+        return None
+    word = next((_text(cells[(r0, c)]) for c in range(min(cols0) - 1, 0, -1) if (r0, c) in cells
+                 and HEADER_WORD.match(_text(cells[(r0, c)]))), None)
+    whole = all(float(v).is_integer() for v in values)
+    rest_fractional = any(not float(number(cells[k])).is_integer() for k in numeric if k[0] != r0)
+    return {"row": r0, "cols": cols0, "values": [_num(v) for v in values], "word": word,
+            "likely": bool(word) or (whole and rest_fractional)}
+
+
+def read_sheet(ws, numeric_header: Optional[bool] = None) -> Sheet:
+    """`numeric_header`: True or False decides whether a first row of rising numbers is labels; None lets the sheet's
+    own signs decide."""
     cells = {}
     for row in ws.iter_rows():
         for c in row:
@@ -62,23 +94,41 @@ def read_sheet(ws) -> Sheet:
     numeric = {k for k, v in cells.items() if number(v) is not None}
     texts = [_text(v) for k, v in sorted(cells.items()) if k not in numeric]
     if not numeric:
-        return Sheet(ws.title, "blank" if len(texts) <= 1 else "labels", texts=texts)
-    first_row = min(r for r, _ in numeric)
+        return Sheet(ws.title, "blank" if len(texts) <= 1 else "labels", texts=texts, cells=cells)
+    candidate = _numeric_header(cells, numeric)
+    as_header = bool(candidate) and (candidate["likely"] if numeric_header is None else numeric_header)
+    if as_header:
+        numeric -= {(candidate["row"], c) for c in candidate["cols"]}
+        if not numeric:
+            return Sheet(ws.title, "labels", texts=texts, cells=cells)
+    first_row, last_row = min(r for r, _ in numeric), max(r for r, _ in numeric)
     first_col = min(c for _, c in numeric)
-    rows = sorted({r for r, _ in numeric})
     cols = sorted({c for _, c in numeric})
     header_row = max((r for (r, c) in cells if r < first_row and c in cols and (r, c) not in numeric), default=None)
     headers = {c: _text(cells[(header_row, c)]) for c in cols if header_row and (header_row, c) in cells}
-    text_left = [c for c in range(first_col - 1, 0, -1) if any((r, c) in cells for r in rows)]
+    number_rows = sorted({r for r, _ in numeric})
+    text_left = [c for c in range(first_col - 1, 0, -1) if any((r, c) in cells for r in number_rows)]
     label_col = text_left[0] if text_left else None          # the nearest column of labels left of the numbers
+    # Subject rows: every row in the block with anything in it, so an animal with no numbers ("dead", or blank with
+    # its own label) is kept and reported rather than silently dropped.
+    has = lambda r: any((r, c) in cells for c in cols) or bool(label_col and (r, label_col) in cells)  # noqa: E731
+    rows = [r for r in range(first_row, last_row + 1) if has(r)]
+    own_labels = label_col and len({_text(cells.get((r, label_col))) for r in number_rows} - {None}) > 1
+    r = last_row + 1
+    while any((r, c) in cells for c in cols) or (own_labels and (r, label_col) in cells):
+        rows.append(r)
+        r += 1
     row_labels = {r: _text(cells[(r, label_col)]) for r in rows if label_col and (r, label_col) in cells}
     if label_col and header_row and (header_row, label_col) in cells:
         headers[label_col] = _text(cells[(header_row, label_col)])
     above = [_text(v) for (r, c), v in sorted(cells.items()) if r < (header_row or first_row)]
     not_numbers = [(f"{get_column_letter(c)}{r}", _text(cells[(r, c)])) for r in rows for c in cols
                    if (r, c) in cells and (r, c) not in numeric]
+    no_numbers = [(r, row_labels.get(r)) for r in rows if not any((r, c) in numeric for c in cols)]
     return Sheet(ws.title, "data", texts=texts, rows=rows, cols=cols, header_row=header_row, headers=headers,
-                 row_labels=row_labels, label_col=label_col, title=next((t for t in above if t), None), not_numbers=not_numbers)
+                 row_labels=row_labels, label_col=label_col, title=next((t for t in above if t), None),
+                 not_numbers=not_numbers, no_numbers=no_numbers, candidate=candidate, header_from_numbers=as_header,
+                 cells=cells)
 
 
 def _time(label: Optional[str]):
@@ -106,13 +156,24 @@ def _close_name(name: str, names: list[str]) -> Optional[str]:
 
 
 def propose(raw: bytes, options: Optional[dict] = None) -> dict:
-    """The plan, and what it means in plain words. `options`: keep_spelling (bool), sheet (name)."""
+    """The plan, and what it means in plain words.
+
+    `options`: keep_spelling (bool), sheet (name), first_row ("labels" or "values": how to read a first row of
+    rising numbers such as 1, 4, 8)."""
     options = options or {}
     try:
         book = load(raw)
     except Exception:
         raise WorkbookError("Couldn't open that as an Excel workbook. Check it opens in Excel, then save it as .xlsx again.")
-    sheets = [read_sheet(ws) for ws in book.worksheets]
+    choice = {"labels": True, "values": False}.get(options.get("first_row"))
+    sheets = [read_sheet(ws, choice) for ws in book.worksheets]
+    found = [x.candidate for x in sheets if x.kind == "data" and x.candidate]
+    if choice is None and len(found) >= 2 and len({tuple(c["values"]) for c in found}) == 1 \
+            and len(found) == sum(x.kind == "data" for x in sheets) and not all(c["likely"] for c in found) \
+            and all(float(v).is_integer() for v in found[0]["values"]):
+        # The same rising row of whole numbers on every sheet: labels, not measurements (still shown for checking).
+        # Fractional values are left alone: identical measurement rows can come from copied baseline values.
+        sheets = [read_sheet(ws, True) for ws in book.worksheets]
     data = [s for s in sheets if s.kind == "data"]
     skipped = [{"sheet": s.name, "why": "blank" if s.kind == "blank" else "only labels, no numbers"}
                for s in sheets if s.kind != "data"]
@@ -127,8 +188,28 @@ def propose(raw: bytes, options: Optional[dict] = None) -> dict:
     return _single_sheet(chosen, data, skipped)
 
 
+def _row_checks(data: list[Sheet]) -> list[str]:
+    """What was decided about rows: a first row of numbers read as labels (or not), and subjects with no numbers."""
+    checks = []
+    used = [x for x in data if x.header_from_numbers]
+    unused = [x for x in data if x.candidate and not x.header_from_numbers]
+    if used:
+        c = used[0].candidate
+        checks.append(f"Row {c['row']} on {_names([x.name for x in used])} ({', '.join(map(str, c['values']))}) is read "
+                      "as labels for the columns, not as measurements.")
+    if unused:
+        c = unused[0].candidate
+        checks.append(f"Row {c['row']} on {_names([x.name for x in unused])} ({', '.join(map(str, c['values']))}) "
+                      "rises steadily like column labels, but is read as measurements.")
+    for x in data:
+        for r, label in x.no_numbers:
+            checks.append(f"{x.name}, row {r}{f' ({label})' if label else ''} has no numbers. It's kept as a subject "
+                          "with no values, so analyses that need every value leave it out and say so.")
+    return checks
+
+
 def _sheet_per_group(data: list[Sheet], sheets: list[Sheet], skipped: list[dict], options: dict) -> dict:
-    checks, notes = [], []
+    checks, notes = _row_checks(data), []
     cols = data[0].cols
     # --- column labels: each sheet's own, and where one is missing, what the other sheets agree on
     columns, filled = [], {}
@@ -152,6 +233,10 @@ def _sheet_per_group(data: list[Sheet], sheets: list[Sheet], skipped: list[dict]
         checks.append(f"{name} has no label{'s' if many else ''} above column{'s' if many else ''} "
                       f"{_names([g[0] for g in gaps])}. The other sheets call {'them' if many else 'it'} "
                       f"{_names([g[1] for g in gaps])}, so {'they are' if many else 'it is'} read that way.")
+    word = next((x.candidate["word"] for x in data if x.header_from_numbers and x.candidate["word"]), None)
+    if word and _time(f"{word} 1") and all(col["unit"] is None for col in columns):
+        for col in columns:
+            col["unit"] = _time(f"{word} 1")[0]
     units = {col["unit"] for col in columns}
     timed = all(isinstance(col["label"], (int, float)) for col in columns)
     time_name = (units.pop() or "Time") if timed and len(units) == 1 else ("Time" if timed else "Condition")
@@ -194,6 +279,14 @@ def _sheet_per_group(data: list[Sheet], sheets: list[Sheet], skipped: list[dict]
                       "label_cell": None})
         for cell, text in s.not_numbers:
             checks.append(f"{s.name}, cell {cell} says '{text}', which isn't a number. It's treated as empty.")
+    labels = [x for p in parts for x in (p["subjects"] or [])]
+    if len(labels) != len(set(labels)):
+        # The same labels on several sheets (m1, m2, ... in every group) are different animals: name them by group.
+        for p in parts:
+            if p["subjects"]:
+                p["subjects"] = [f"{p['group']} {x}" for x in p["subjects"]]
+        notes.append("Animals are labelled the same way on different sheets, so each label is prefixed with its "
+                     "group (for example 'Ctrl m1').")
     names = [p["group"] for p in parts]
     if len(set(names)) != len(names):
         dup = next(n for n in names if names.count(n) > 1)
@@ -219,35 +312,52 @@ def _sheet_per_group(data: list[Sheet], sheets: list[Sheet], skipped: list[dict]
             "Each sheet holds different animals (no animal appears in two groups).",
         ],
         "subjects_per_group": sizes,
+        "first_row": _first_row(data),
     }
     return {"plan": plan, "summary": summary}
 
 
 def _single_sheet(s: Sheet, data: list[Sheet], skipped: list[dict]) -> dict:
-    checks = []
+    """An ordinary table: every column with a header or a value is kept, text columns included."""
+    checks = _row_checks([s])
+    cells = s.cells
+    head = s.header_row if s.header_row else (s.candidate["row"] if s.header_from_numbers else None)
+    present = sorted({c for (r, c) in cells if r in s.rows or r == head})
     columns, used = [], set()
-    if s.label_col:
-        name = s.headers.get(s.label_col) or "Label"
-        columns.append({"col": s.label_col, "name": name, "numeric": False})
-        used.add(name)
-    for c in s.cols:
-        name = s.headers.get(c) or f"Column {get_column_letter(c)}"
-        if not s.headers.get(c):
+    for c in present:
+        values = [cells[(r, c)] for r in s.rows if (r, c) in cells]
+        header = _text(cells.get((head, c))) if head else None
+        name = header or f"Column {get_column_letter(c)}"
+        if not header:
             checks.append(f"Column {get_column_letter(c)} on {s.name} has no label, so it's called '{name}'.")
         while name in used:
             name += " (2)"
         used.add(name)
-        columns.append({"col": c, "name": name, "numeric": True})
-    for cell, text in s.not_numbers:
-        checks.append(f"{s.name}, cell {cell} says '{text}', which isn't a number. It's treated as empty.")
+        numeric = bool(values) and all(number(v) is not None for v in values)
+        if not numeric and values and sum(number(v) is not None for v in values) >= 0.8 * len(values):
+            odd = [f"{get_column_letter(c)}{r}" for r in s.rows if (r, c) in cells and number(cells[(r, c)]) is None]
+            checks.append(f"Column '{name}' on {s.name} is mostly numbers, but {_names(odd[:3])} "
+                          f"{'isn\'t' if len(odd) == 1 else 'aren\'t'}. Those are treated as empty.")
+            numeric = True
+        columns.append({"col": c, "name": name, "numeric": numeric})
     others = [d.name for d in data if d.name != s.name]
     plan = {"kind": "single_sheet", "sheet": s.name, "rows": s.rows, "columns": columns}
     summary = {"layout": f"One table, from {s.name}", "sheet": s.name, "other_sheets": others,
-               "skipped": skipped, "checks": checks, "notes": [], "assumptions": [], "groups": [], "times": []}
+               "skipped": skipped, "checks": checks, "notes": [], "assumptions": [], "groups": [], "times": [],
+               "first_row": _first_row([s])}
     if others:
         summary["notes"].append(f"The other sheets with numbers ({_names(others)}) are laid out differently, so only "
                                 f"{s.name} is used. Pick another sheet if that's the wrong one.")
     return {"plan": plan, "summary": summary}
+
+
+def _first_row(data: list[Sheet]) -> Optional[str]:
+    """For the screen's switch: how a first row of rising numbers was read, if there was one."""
+    if any(x.header_from_numbers for x in data):
+        return "labels"
+    if any(x.candidate for x in data):
+        return "values"
+    return None
 
 
 def _names(names: list[str]) -> str:

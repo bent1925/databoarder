@@ -472,3 +472,9 @@ def test_numbers_are_rounded_as_the_page_rounds_them(x, shown):
 
 def test_tiny_p_values_read_naturally():
     assert report.p_is(0.00001) == "P < 0.0001" and report.p_is(0.0123) == "P = 0.0123"
+
+
+def test_a_subject_with_every_value_empty_still_counts_as_incomplete():
+    df = pd.DataFrame({"id": ["a", "b", "c", "d", "e"], "pre": [1, 2, 3, 4, np.nan], "post": [2, 3, 5, 6, np.nan]})
+    r = engine.run(df, groups_spec(["pre", "post"], paired=True, subject_col="id"))
+    assert r["left_out"]["incomplete_subjects"] == 1 and r["n_subjects"] == 4
