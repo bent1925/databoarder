@@ -27,10 +27,16 @@ class CompareGroupsSpec(BaseModel):
     equal_spread: bool = Field(default=False, description="Assume every group has the same spread (SD)")
     followup: Literal["all_pairs", "vs_control", "none"] = "none"
     control: Optional[str] = None
+    subset_col: Optional[str] = Field(default=None, description="Only use rows where this column ...")
+    subset_value: Optional[str] = Field(default=None, description="... has this value (such as Day = 12)")
     assignment: Assignment = "unsure"
 
     @model_validator(mode="after")
     def _fits(self):
+        if self.subset_col and self.subset_value in (None, ""):
+            raise ValueError(f"Choose which value of '{self.subset_col}' to use.")
+        if self.subset_col and self.subset_col in (self.group_col, self.value_col, self.subject_col):
+            raise ValueError("The column used to pick rows can't also be the group, measurement or subject column.")
         if self.layout == "long" and not (self.group_col and self.value_col):
             raise ValueError("Choose the column that names the group and the column holding the measurement.")
         if self.followup == "vs_control" and self.control not in self.groups:

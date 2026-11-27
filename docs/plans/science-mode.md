@@ -32,6 +32,33 @@ The analyses labs use most often. Each one was checked against an independent ca
 Data can be uploaded as CSV or pasted from a spreadsheet. It can be laid out one column per group (like Prism) or one
 row per measurement.
 
+### Excel workbooks (added 2026-11-26, from Ben's "House comparison LA.xlsx")
+
+Workbooks with **one sheet per group** (animals down the side, days across the top) are read by fixed rules
+(`app/science/workbook.py`), with no setup from the person:
+
+- Sheets without numbers are ignored. A sheet that only lists group names is used to check their spelling and order.
+- Title rows ("Table 3") are skipped. The group name comes from the label beside the first animal, the sheet's title,
+  or the sheet's name.
+- Day labels are read by their number, so "Day11" and "Day 11" are the same. A missing label is taken from the other
+  sheets at the same position. A label that disagrees with the other sheets stops the import with a reason.
+- A group name close to one on the list sheet (for example "25mg/lg + tala" for "25mg/kg + Tala") uses the list's
+  spelling. One click keeps the sheet's own spelling instead.
+- Text in a number cell ("dead", "n/a") is treated as empty and listed.
+
+The result is one tidy table (Group, Animal, Day, Value) with a chart of each group's average over time. **Everything
+inferred is listed under "Please check", and nothing can be analyzed until the person clicks "That's right"** (the
+server enforces it). The plan is a list of exact cell positions (`app/science/sheets.py`). It's copied into the
+reproduction script, which rebuilds the table from the original .xlsx and checks its fingerprint.
+
+The time course itself needs two-way repeated-measures ANOVA or a mixed model (phase 2). Until then, a new
+**"Use only some rows?"** choice lets the person compare the groups on one day (the day is their call, with a warning
+not to test every day and report the clearest), or compare days within one group as repeated measures.
+
+A single ordinary sheet is read as a table. When the sheets with numbers have different layouts, the person picks
+which sheet to use. Not handled yet: .xls and .numbers files (the person is told how to convert them), several groups
+on one sheet, and animal IDs shared across sheets.
+
 Decisions made in phase 1 (open to change):
 
 - **Welch is the suggested default** for unequal spread (marked "No is safer"), but the person still has to choose.

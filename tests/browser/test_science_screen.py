@@ -2,6 +2,8 @@
 
 Needs Playwright and its Chromium browser (see test_combine_screen.py). Without them these tests are skipped.
 """
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("playwright.sync_api", reason="Playwright isn't installed")
@@ -81,3 +83,38 @@ def test_the_page_rounds_numbers_exactly_as_the_report_does(lab):
     from app.science.report import num
     values = [762.25, 1.0005, 143.0, 12345.6, 9999.5, 0.012345, 0.0001234, -44.625, 2.5e6, 806.875, 0.6895, 19.98]
     assert lab.evaluate("(xs) => xs.map(fmt)", values) == [num(x) for x in values]
+
+
+def test_a_workbook_with_one_sheet_per_group(lab, tmp_path):
+    import importlib.util
+    found = importlib.util.spec_from_file_location("science_workbook_cases", Path(__file__).parents[1] / "test_science_workbook.py")
+    cases = importlib.util.module_from_spec(found)
+    found.loader.exec_module(cases)
+    make_book = cases.make_book
+    path = tmp_path / "House comparison.xlsx"
+    path.write_bytes(make_book())
+    lab.set_input_files("#file", str(path))
+    lab.wait_for_selector("#wb")
+    panel = lab.inner_text("#wb")
+    assert "One sheet per group" in panel and "Please check" in panel and "Ignored:" in panel
+    assert lab.locator("#wb svg polyline").count() == 3
+    assert lab.locator("#s2").is_hidden()                              # nothing to analyze until it's confirmed
+    lab.click("#wbok")
+    lab.wait_for_selector("#s2:not(.hidden)")
+    assert "Checked" in lab.inner_text("#wb")
+    lab.click("text=Do groups differ?")
+    assert lab.locator("#check").is_disabled()
+    assert "which day" in lab.inner_text("#waiting")
+    lab.select_option("select[data-sel=subset_value]", "12")
+    pick(lab, "paired", "No, different subjects")
+    pick(lab, "method", "Averages")
+    pick(lab, "equal_spread", "No")
+    pick(lab, "followup", "Each group vs a control")
+    lab.select_option("select[data-sel=control]", "Vehicle Control")
+    pick(lab, "assignment", "Yes, at random")
+    lab.click("#check")
+    lab.wait_for_selector("#s4:not(.hidden)")
+    assert "Only rows where 'Day' is 12" in lab.inner_text("#readback")
+    lab.click("#run")
+    lab.wait_for_selector("#report:not(.hidden) .verdict")
+    assert lab.locator("#report svg circle").count() == 15

@@ -91,7 +91,10 @@ phase 1 of a question recommender: [docs/plans/recommender.md](docs/plans/recomm
 
 ## Science mode (`/science`, app/science/)
 A separate page for lab data, styled like a lab notebook. It's a first try at serving scientists who use GraphPad
-Prism. Paste cells or upload a CSV, laid out one column per group or one row per measurement. Then pick a question
+Prism. Paste cells, or upload a CSV laid out one column per group or one row per measurement, or upload an Excel workbook
+with one sheet per group (animals down the side, days across). Workbooks are read by fixed rules: blank sheets are
+ignored, and anything inferred (a missing day label, a misspelt group name) is listed for one click of confirmation
+before anything runs. Then pick a question
 (do groups differ, are categories related, do two measurements move together) and answer the design questions:
 same subjects?, averages or ranks?, equal spread?, which pairs?, random assignment? Those answers decide the test:
 t tests, Welch's or ordinary one-way ANOVA with Tukey, Dunnett or Games-Howell, repeated-measures ANOVA with the

@@ -52,9 +52,23 @@ def _labels(s: pd.Series) -> pd.Series:
     return s.map(one).where(s.notna())
 
 
+def only_rows(df: pd.DataFrame, spec: dict) -> tuple[pd.DataFrame, dict | None]:
+    """Keeps only the rows where one column has one value (such as Day = 12), when that was chosen."""
+    col = spec.get("subset_col")
+    if not col:
+        return df, None
+    if col not in df.columns:
+        raise EngineError(f"Column '{col}' isn't in your table.")
+    keep = _labels(df[col]) == str(spec.get("subset_value"))
+    if not keep.any():
+        raise EngineError(f"No rows have '{col}' equal to {spec.get('subset_value')!r}.")
+    return df[keep], {"column": col, "value": spec.get("subset_value"), "kept": int(keep.sum()), "of": len(df)}
+
+
 def tidy_groups(df: pd.DataFrame, spec: dict) -> tuple[pd.DataFrame, dict]:
     """One row per value: columns `group`, `value` and `subject`. Also says what was left out and why."""
     groups = list(spec["groups"])
+    df, kept = only_rows(df, spec)
     if len(groups) < 2:
         raise EngineError("Choose at least two groups to compare.")
     if len(set(groups)) != len(groups):
@@ -91,7 +105,7 @@ def tidy_groups(df: pd.DataFrame, spec: dict) -> tuple[pd.DataFrame, dict]:
         long = long[long["group"].isin(groups)].reset_index(drop=True)
 
     left_out = {"empty_values": {g: int(long.loc[long["group"] == g, "value"].isna().sum()) for g in groups},
-                "incomplete_subjects": 0}
+                "incomplete_subjects": 0, "rows_kept": kept}
     long = long.dropna(subset=["value"])
     if spec.get("paired"):
         if long["subject"].isna().any():

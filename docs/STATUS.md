@@ -18,8 +18,11 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   page at `/science` with a lab-notebook look, covering Prism's column and contingency tables (t tests, one-way and
   repeated-measures ANOVA with follow-up tests, rank-based tests, Fisher's exact test, chi-square, correlation).
   The reproduction script contains the engine word for word and is tested against the report.
-  The campaign screens are unchanged apart from a link. 376 tests pass, 11 of them browser tests.
+  The campaign screens are unchanged apart from a link. 392 tests pass, 12 of them browser tests.
   Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
+  **Excel workbooks (2026-11-26):** Ben's `sample_data/House comparison LA.xlsx` (one sheet per group, days across,
+  not in git) is read with no setup and one confirmation click. Details in the plan, under "Excel workbooks".
+  Groups can now be compared on one chosen day.
   **Next:** Ben tries it. Still ask the potential customer which Prism analyses they run each month, and reorder
   phases 2–9 to match.
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6), and question

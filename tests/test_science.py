@@ -430,9 +430,13 @@ def test_file_names_are_made_safe():
     assert "/" not in d["name"] and '"' not in d["name"] and "\n" not in d["name"]
 
 
-def test_excel_files_get_a_way_forward():
+def test_files_that_cant_be_read_get_a_way_forward():
     out = client.post("/api/science/upload", files={"file": ("plate.xlsx", b"PK..", "application/octet-stream")})
-    assert out.status_code == 400 and "paste" in out.json()["detail"]
+    assert out.status_code == 400 and "save it as .xlsx" in out.json()["detail"]
+    out = client.post("/api/science/upload", files={"file": ("old.xls", b"..", "application/octet-stream")})
+    assert out.status_code == 400 and ".xlsx" in out.json()["detail"]
+    out = client.post("/api/science/upload", files={"file": ("study.numbers", b"..", "application/octet-stream")})
+    assert out.status_code == 400 and "Export To > Excel" in out.json()["detail"]
 
 
 def test_readback_reports_problems_before_running():

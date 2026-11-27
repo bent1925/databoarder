@@ -113,6 +113,13 @@
   .grid2 select { width: 100%; }
   .waiting { font-size: 14px; color: var(--muted); }
 
+  .wb { margin-top: 14px; border: 1.5px solid var(--ink); border-radius: 12px; padding: 14px 16px; background: #fff; }
+  .wb.todo { background: var(--hi-soft); }
+  .wb h3 { font: 700 18px var(--serif); margin: 0 0 4px; }
+  .wb .sub { font-size: 14px; color: var(--muted); margin: 0 0 10px; }
+  .wb table { margin: 6px 0 10px; }
+  .wb .item { font-size: 14px; }
+  .done { font: 700 13px var(--mono); color: var(--teal); }
   .readback { font: 600 17px/1.5 var(--serif); background: var(--hi-soft); border: 1.5px solid var(--ink); border-radius: 10px; padding: 14px 16px; }
   .note { font-size: 14px; background: var(--violet-soft); border: 1.2px solid var(--ink); border-radius: 10px; padding: 8px 12px; margin-top: 10px; }
   .err { color: #b8124f; font-weight: 700; margin-top: 10px; }
@@ -170,11 +177,11 @@
   <section class="card" id="s1">
     <p class="step">Step 01 · the data</p>
     <h2>Add your measurements</h2>
-    <p class="how">A CSV file, or cells pasted straight from your spreadsheet. Either <b>one column per group</b> (the way Prism's column tables look) or <b>one row per measurement</b> with a column naming the group. We tidy obvious formatting and list exactly what changed.</p>
+    <p class="how">An Excel workbook, a CSV file, or cells pasted straight from your spreadsheet. Workbooks with <b>one sheet per group</b> (animals down the side, days across the top) are read for you. Either <b>one column per group</b> (the way Prism's column tables look) or <b>one row per measurement</b> with a column naming the group. We tidy obvious formatting and list exactly what changed.</p>
     <div id="add">
       <div id="drop" class="drop"><div class="big">🧫</div>
-        <div>Drop a CSV here, or <button class="linkish" id="pick">browse</button></div>
-        <input type="file" id="file" accept=".csv,text/csv" class="hidden"></div>
+        <div>Drop an Excel or CSV file here, or <button class="linkish" id="pick">browse</button></div>
+        <input type="file" id="file" accept=".xlsx,.xlsm,.csv,text/csv" class="hidden"></div>
       <div class="row"><button class="linkish" id="showpaste">📋 Paste cells instead</button></div>
       <div id="pastebox" class="hidden" style="margin-top:10px">
         <textarea id="paste" placeholder="Control	Treated&#10;4.1	5.3&#10;3.8	6.0&#10;4.4	5.1"></textarea>
@@ -272,11 +279,46 @@ function loaded(d) {
     ${d.rows > d.preview.length ? `<p class="muted" style="font-size:13px">First ${d.preview.length} of ${d.rows} rows.</p>` : ""}</div>
     ${d.prep.steps.length ? `<div class="note">🧹 Tidied for you (also in the script):<ul class="plain">${d.prep.steps.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
     ${d.prep.notes.map((t) => `<div class="note">💡 ${esc(t)}</div>`).join("")}`;
+  if (d.workbook) $("info").insertAdjacentHTML("beforeend", workbookHtml(d));
+  bindWorkbook(d);
   $("peek").onclick = () => $("prev").classList.toggle("hidden");
   $("other").onclick = () => { $("add").classList.remove("hidden"); $("info").classList.add("hidden"); hideFrom(2); $("file").value = ""; };
-  hideFrom(3);
+  hideFrom(2);
+  if (d.workbook && !d.workbook.confirmed) return;      // nothing is analyzed until the reading is confirmed
   $("s2").classList.remove("hidden");
   renderQuestions();
+}
+
+function workbookHtml(d) {
+  const w = d.workbook, ok = w.confirmed;
+  const list = (items, icon) => items.map((t) => `<div class="item"><span class="s">${icon}</span><span>${esc(t)}</span></div>`).join("");
+  let h = `<div class="wb ${ok ? "" : "todo"}" id="wb"><h3>📗 How we read your workbook</h3><p class="sub">${esc(w.layout)}. Fixed rules, no AI.</p>`;
+  if (w.kind === "sheet_per_group") {
+    h += `<div class="scroll"><table><thead><tr><th>Group</th><th>From sheet</th><th>Animals</th></tr></thead><tbody>${w.groups.map((g) => `<tr><td>${esc(g.name)}</td><td class="num">${esc(g.sheet)}</td><td class="num">${g.subjects}</td></tr>`).join("")}</tbody></table></div>
+      <p style="margin:0 0 8px;font-size:14px"><b>${esc(w.time_name)}s:</b> <span style="font-family:var(--mono)">${w.times.map(esc).join(", ")}</span></p>
+      ${w.means ? timeChart(w.means, w.time_name) : ""}`;
+  } else if (w.other_sheets && w.other_sheets.length) {
+    h += `<p style="font-size:14px">Use sheet: <select id="wbsheet">${[w.sheet, ...w.other_sheets].map((n) => `<option ${n === w.sheet ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></p>`;
+  }
+  if (w.checks.length) h += `<p style="margin:10px 0 2px;font-weight:800">${ok ? "You checked" : "Please check"}:</p>${list(w.checks, "⚠️")}`;
+  if (w.checks.some((t) => t.includes("Using '"))) h += `<p style="font-size:13.5px;margin:6px 0"><button class="linkish" id="wbkeep">Keep each sheet's own spelling instead</button></p>`;
+  h += list(w.assumptions, "🙋") + list(w.notes, "💡");
+  if (w.skipped.length) h += list(["Ignored: " + w.skipped.map((x) => `${x.sheet} (${x.why})`).join(", ") + "."], "🗑️");
+  h += `<div class="row">${ok ? `<span class="done">✅ Checked</span>` : `<button class="btn" id="wbok">✅ That's right</button>`}
+    <a class="linkish" href="/api/science/datasets/${encodeURIComponent(d.dataset_id)}/tidy" download>⬇️ Tidy table (CSV)</a></div>
+    ${ok ? "" : `<p class="muted" style="font-size:13px;margin:8px 0 0">Not right? Fix it in the spreadsheet (for example, add a missing label), then add the workbook again.</p>`}</div>`;
+  return h;
+}
+
+function bindWorkbook(d) {
+  if (!d.workbook) return;
+  const go = async (path, body) => {
+    $("err1").textContent = "";
+    try { loaded(await post(path, body)); } catch (e) { $("err1").textContent = "😕 " + e.message; }
+  };
+  if ($("wbok")) $("wbok").onclick = async () => { await go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/confirm`, {}); if (!$("s2").classList.contains("hidden")) $("s2").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  if ($("wbkeep")) $("wbkeep").onclick = () => go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/reread`, { keep_spelling: true });
+  if ($("wbsheet")) $("wbsheet").onchange = (e) => go(`/api/science/datasets/${encodeURIComponent(d.dataset_id)}/reread`, { sheet: e.target.value });
 }
 
 function hideFrom(n) {
@@ -359,6 +401,13 @@ function setupCompare() {
     h += `<div class="grid2"><div><label>Group column ${tag("group_col")}</label>${select("group_col", allCols().filter((x) => levels(x).length >= 2))}</div>
       <div><label>Measurement column ${tag("value_col")}</label>${select("value_col", numeric())}</div>
       <div><label>Subject column ${tag("subject_col")} ${c.paired ? "<b>(needed)</b>" : "(optional)"}</label>${select("subject_col", allCols(), "None")}</div></div>`;
+    const pickable = allCols().filter((x) => ![c.group_col, c.value_col, c.subject_col].includes(x) && levels(x).length >= 2);
+    if (pickable.length) {
+      const help = c.subset_col ? `Only rows with this ${esc(c.subset_col.toLowerCase())} are used. Pick it before looking at results: testing each one and reporting the clearest makes a false alarm much more likely.`
+        : "For example, compare the groups on one day only.";
+      h += choice(c.subset_col ? `Which ${esc(c.subset_col.toLowerCase())}?` : "Use only some rows?", "subset_value", help,
+        `<div class="grid2"><div><label>Pick rows by ${tag("subset_col")}</label>${select("subset_col", pickable, "None: use every row")}</div>${c.subset_col ? `<div><label>${esc(c.subset_col)}</label>${select("subset_value", levels(c.subset_col))}</div>` : ""}</div>`, !!c.subset_col);
+    }
     if (c.group_col) h += choice("Which groups?", "groups", "Click in the order you want them shown. The first is the reference for differences.", chips("groups", levels(c.group_col)), false);
   }
   const k = (c.groups || []).length;
@@ -419,6 +468,7 @@ function missing() {
     if ((c.groups || []).length > 2 && c.followup === undefined) out.push("which pairs");
     if (c.followup === "vs_control" && (c.groups || []).length > 2 && !c.control) out.push("the control");
     if (c.layout === "long" && c.paired && !c.subject_col) out.push("the subject column");
+    if (c.layout === "long" && c.subset_col && !c.subset_value) out.push("which " + c.subset_col.toLowerCase());
     if (!c.assignment) out.push("random assignment?");
   } else if (S.analysis === "contingency") {
     if ((c.rows || []).length < 2) out.push("at least two groups");
@@ -454,8 +504,12 @@ function renderSetup() {
     renderSetup();
   });
   $("setup").querySelectorAll("[data-sel]").forEach((s) => s.onchange = () => {
-    const key = s.dataset.sel; S.c[key] = s.value || null; touched(key);
-    if (key === "group_col") { S.c.groups = s.value ? levels(s.value) : []; S.guessed.add("groups"); S.c.control = null; }
+    const key = s.dataset.sel, prevGroup = S.c.group_col; S.c[key] = s.value || null; touched(key);
+    if (key === "group_col") {
+      if (s.value && s.value === S.c.subset_col) { S.c.subset_col = prevGroup || null; S.c.subset_value = null; }   // swap: compare days within a group
+      S.c.groups = s.value ? levels(s.value) : []; S.guessed.add("groups"); S.c.control = null;
+    }
+    if (key === "subset_col") S.c.subset_value = null;
     if (key === "row_col") { S.c.rows = s.value ? levels(s.value) : []; S.guessed.add("rows"); S.c.event = undefined; }
     if (key === "col_col") { S.c.cols = s.value ? levels(s.value) : []; S.guessed.add("cols"); S.c.event = undefined; }
     if (key === "label_col") { S.c.rows = s.value ? levels(s.value) : []; S.guessed.add("rows"); }
@@ -479,6 +533,7 @@ function buildSpec() {
     return { analysis: "compare_groups", layout: c.layout, groups: c.groups, group_col: c.layout === "long" ? c.group_col : null,
       value_col: c.layout === "long" ? c.value_col : null, subject_col: c.subject_col || null, paired: c.paired, method: c.method,
       equal_spread: c.method === "means" && !c.paired ? !!c.equal_spread : false, followup: k > 2 ? c.followup : "none",
+      subset_col: c.layout === "long" && c.subset_col ? c.subset_col : null, subset_value: c.layout === "long" && c.subset_col ? c.subset_value : null,
       control: k > 2 && c.followup === "vs_control" ? c.control : null, assignment: c.assignment };
   }
   if (S.analysis === "contingency") {
@@ -519,7 +574,8 @@ $("run").onclick = async () => {
 function niceTicks(lo, hi, n = 5) {
   const span = hi - lo || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || step0;
-  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toPrecision(12));
+  // Start at or below the lowest value, so the bottom of the data has a label.
+  const out = []; for (let v = Math.floor(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toPrecision(12));
   return out;
 }
 // Must match report.num in Python: 4 significant figures, halves up, trailing zeros dropped.
@@ -550,11 +606,30 @@ function groupsChart(r) {
       [grp.ci_low, grp.ci_high].forEach((v) => { s += `<line x1="${x(i) - w / 2}" x2="${x(i) + w / 2}" y1="${y(v)}" y2="${y(v)}" stroke="var(--ink)" stroke-width="1.8"/>`; });
       s += `<line x1="${x(i) - w}" x2="${x(i) + w}" y1="${y(grp.mean)}" y2="${y(grp.mean)}" stroke="var(--ink)" stroke-width="3"/>`;
     }
-    s += `<text class="lbl" x="${x(i)}" y="${H - B + 18}" text-anchor="middle">${esc(short(grp.name))}</text><text x="${x(i)}" y="${H - B + 33}" text-anchor="middle">n = ${grp.n}</text>`;
+    s += `<text class="lbl" x="${x(i)}" y="${H - B + 18}" text-anchor="middle"><title>${esc(grp.name)}</title>${esc(short(grp.name, Math.max(6, Math.floor(band / 8.5))))}</text><text x="${x(i)}" y="${H - B + 33}" text-anchor="middle">n = ${grp.n}</text>`;
   });
   s += `<text x="14" y="${(H - B) / 2}" transform="rotate(-90 14 ${(H - B) / 2})" text-anchor="middle">${esc(short(r.spec.value_col || "value", 30))}</text></svg>`;
   const cap = ranks ? "Each dot is one value. Thick line: median. Box: middle half of the values." : "Each dot is one value. Thick line: mean. Whiskers: 95% confidence interval of the mean.";
   return `<div class="fig">${s}<div class="cap"><b>Fig. 1</b> ${cap}${paired ? " Grey lines join the same subject." : ""}</div></div>`;
+}
+
+function timeChart(series, timeName) {
+  const W = 640, H = 230, L = 46, R = 170, T = 12, B = 34;
+  const xs = series.flatMap((g) => g.points.map((p) => p[0])), ys = series.flatMap((g) => g.points.map((p) => p[1]).filter((v) => v !== null));
+  const xt = niceTicks(Math.min(...xs), Math.max(...xs)), yt = niceTicks(Math.min(...ys), Math.max(...ys), 4);
+  const x0 = Math.min(xt[0], ...xs), x1 = Math.max(xt[xt.length - 1], ...xs), y0 = Math.min(yt[0], ...ys), y1 = Math.max(yt[yt.length - 1], ...ys);
+  const X = (v) => L + (W - L - R) * (v - x0) / (x1 - x0 || 1), Y = (v) => T + (H - T - B) * (1 - (v - y0) / (y1 - y0 || 1));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Average of each group over time">`;
+  yt.forEach((t) => { s += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(t) + 4}" text-anchor="end">${fmt(t)}</text>`; });
+  xt.forEach((t) => { s += `<text x="${X(t)}" y="${H - B + 16}" text-anchor="middle">${fmt(t)}</text>`; });
+  s += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/><text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle">${esc(timeName)}</text>`;
+  series.forEach((g, i) => {
+    const c = COLORS[i % COLORS.length], pts = g.points.filter((p) => p[1] !== null);
+    s += `<polyline fill="none" stroke="${c}" stroke-width="2.5" points="${pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(" ")}"/>`;
+    pts.forEach((p) => { s += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="${c}" stroke="var(--ink)" stroke-width=".8"/>`; });
+    s += `<rect x="${W - R + 12}" y="${T + i * 18}" width="11" height="11" fill="${c}" stroke="var(--ink)" stroke-width=".8"/><text x="${W - R + 28}" y="${T + i * 18 + 10}">${esc(short(g.group, 22))}</text>`;
+  });
+  return `<div class="fig" style="margin-top:4px">${s}</svg><div class="cap"><b>Fig. 0</b> Average of each group, as read from the workbook. A quick look to check nothing was read wrongly.</div></div>`;
 }
 
 function tableChart(r) {
@@ -634,8 +709,8 @@ function renderReport(r) {
       <p>Same file + same choices + same versions = the same numbers, every time. ${r.repro.random_steps === "none" ? "Nothing in this analysis is random." : esc(r.repro.random_steps) + "."}</p>
       <div class="fp">Data fingerprint (sha256): ${esc(r.repro.data_sha256)}<br>Built with: ${Object.entries(r.repro.versions).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(", ")}</div>
       ${r.prep.length ? `<p>Tidying applied before the analysis (also in the script):</p><ul class="plain">${r.prep.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
-      <div class="row"><a class="btn soft small" href="/api/science/datasets/${encodeURIComponent(S.ds.dataset_id)}/data" download="${esc(r.data_name)}">⬇️ Data file</a><button class="btn soft small" id="dl">⬇️ Script (.py)</button><button class="btn soft small" id="copy">📋 Copy script</button><span id="copied" class="muted" aria-live="polite"></span></div>
-      <p class="muted" style="font-size:13px">Put the script next to the data file and run <code>python reproduce.py</code>. It refuses to run on a different file.</p>
+      <div class="row"><a class="btn soft small" href="/api/science/datasets/${encodeURIComponent(S.ds.dataset_id)}/data" download="${esc(r.data_name)}">⬇️ Original file</a><button class="btn soft small" id="dl">⬇️ Script (.py)</button><button class="btn soft small" id="copy">📋 Copy script</button><span id="copied" class="muted" aria-live="polite"></span></div>
+      <p class="muted" style="font-size:13px">Put the script next to the original file and run <code>python reproduce.py</code>. It refuses to run on a different file${S.ds.workbook ? ", and rebuilds the tidy table from the workbook exactly as shown here" : ""}.</p>
       <pre>${esc(r.script)}</pre></div>
     <div class="row"><button class="btn" id="again">🔁 Ask another question of this data</button></div>`;
   $("report").innerHTML = h;

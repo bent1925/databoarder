@@ -15,7 +15,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ..prep import prepare, script_block
-from . import engine, report, script
+from . import engine, report, script, sheets, workbook
 from .schemas import ScienceSpec
 
 router = APIRouter()
@@ -28,6 +28,11 @@ SPEC = TypeAdapter(ScienceSpec)
 class PasteBody(BaseModel):
     text: str
     name: str = "pasted_data.csv"
+
+
+class RereadBody(BaseModel):
+    keep_spelling: bool = False
+    sheet: Optional[str] = None
 
 
 class SpecBody(BaseModel):
@@ -65,12 +70,18 @@ def _profile(df: pd.DataFrame) -> list[dict]:
     return cols
 
 
-def guesses(df: pd.DataFrame) -> dict:
+def guesses(df: pd.DataFrame, plan: Optional[dict] = None) -> dict:
     """Starting points for the column choices, shown as guesses. Nothing here is a confirmed choice."""
+    if plan and plan["kind"] == "sheet_per_group":
+        # Built from one sheet per group: compare the groups on one day (which day is the person's call).
+        return {"compare_groups": {"layout": "long", "group_col": plan["group_name"], "value_col": plan["value_name"],
+                                   "subject_col": plan["subject_name"], "subset_col": plan["time_name"]}}
     cols = _profile(df)
     labels = [c["name"] for c in cols if not c["numeric"] and c["distinct"] == len(df)]
     cats = [c["name"] for c in cols if not c["numeric"] and 2 <= c["distinct"] <= 12 and c["distinct"] < len(df)]
-    num = [c["name"] for c in cols if c["numeric"]]
+    num = sorted((c["name"] for c in cols if c["numeric"]), key=lambda n: -df[n].nunique())   # measurements vary most
+    num = [c["name"] for c in cols if c["numeric"] and c["name"] in num[:1]] + \
+          [c["name"] for c in cols if c["numeric"] and c["name"] not in num[:1]]
     out: dict = {}
     if cats and num:
         out["compare_groups"] = {"layout": "long", "group_col": cats[0], "value_col": num[0],
@@ -87,10 +98,37 @@ def guesses(df: pd.DataFrame) -> dict:
     return out
 
 
-def _safe_name(name: str) -> str:
+def _safe_name(name: str, ext: str = ".csv") -> str:
     """A file name that is safe in a download header and a script."""
     base = re.sub(r"[^A-Za-z0-9._ -]", "_", name.replace("\\", "/").split("/")[-1]).strip(" .") or "data"
-    return base[:80] if base.lower().endswith(".csv") else base[:76] + ".csv"
+    return base[:80] if base.lower().endswith(ext) else base[:76] + ext
+
+
+def _keep(entry: dict) -> str:
+    dataset_id = uuid.uuid4().hex[:12]
+    while len(DATASETS) >= MAX_DATASETS:
+        DATASETS.popitem(last=False)
+    DATASETS[dataset_id] = entry
+    return dataset_id
+
+
+def _describe(dataset_id: str) -> dict:
+    ds = DATASETS[dataset_id]
+    df = ds["df"]
+    head = df.head(8)
+    out = {"dataset_id": dataset_id, "name": ds["name"], "rows": int(df.shape[0]), "columns": _profile(df),
+           "guesses": guesses(df, (ds.get("workbook") or {}).get("plan")),
+           "prep": {"steps": [s.text for s in ds["prep"]], "notes": ds.get("notes", [])},
+           "preview": head.astype(object).where(head.notna(), None).to_dict("records")}
+    if ds.get("workbook"):
+        out["workbook"] = {**ds["workbook"]["summary"], "confirmed": ds["confirmed"], "kind": ds["workbook"]["plan"]["kind"]}
+        if ds["workbook"]["plan"]["kind"] == "sheet_per_group":
+            plan = ds["workbook"]["plan"]
+            means = df.groupby([plan["group_name"], plan["time_name"]], sort=False)[plan["value_name"]].mean()
+            out["workbook"]["means"] = [{"group": g, "points": [[t, None if pd.isna(m) else float(m)]
+                                                                for (gg, t), m in means.items() if gg == g]}
+                                        for g in df[plan["group_name"]].unique()]
+    return out
 
 
 def _store(raw: bytes, name: str) -> dict:
@@ -103,14 +141,22 @@ def _store(raw: bytes, name: str) -> dict:
         raise HTTPException(400, "The table needs a header row and at least 2 rows of values.")
     df, steps, notes = prepare(df)
     notes = [n for n in notes if "one column per date" not in n]   # wide tables are normal here
-    dataset_id = uuid.uuid4().hex[:12]
-    while len(DATASETS) >= MAX_DATASETS:
-        DATASETS.popitem(last=False)
-    DATASETS[dataset_id] = {"df": df, "raw": raw, "name": name, "sha": hashlib.sha256(raw).hexdigest(), "prep": steps}
-    head = df.head(8)
-    return {"dataset_id": dataset_id, "name": name, "rows": int(df.shape[0]), "columns": _profile(df),
-            "guesses": guesses(df), "prep": {"steps": [s.text for s in steps], "notes": notes},
-            "preview": head.astype(object).where(head.notna(), None).to_dict("records")}
+    return _describe(_keep({"df": df, "raw": raw, "name": name, "sha": hashlib.sha256(raw).hexdigest(), "prep": steps,
+                            "notes": notes, "confirmed": True}))
+
+
+def _store_workbook(raw: bytes, name: str, options: Optional[dict] = None) -> dict:
+    """Reads the workbook by fixed rules. Anything inferred waits for the person's OK before it can be analyzed."""
+    try:
+        found = workbook.propose(raw, options)
+        df = sheets.build_table(raw, found["plan"])
+    except workbook.WorkbookError as problem:
+        raise HTTPException(400, str(problem))
+    if df.shape[0] < 2:
+        raise HTTPException(400, "The workbook has fewer than 2 rows of numbers.")
+    return _describe(_keep({"df": df, "raw": raw, "name": name, "sha": hashlib.sha256(raw).hexdigest(), "prep": [],
+                            "workbook": {**found, "options": options or {}, "table_sha": sheets.table_sha256(df)},
+                            "confirmed": False}))
 
 
 def _get(dataset_id: str) -> dict:
@@ -136,8 +182,14 @@ async def upload(file: UploadFile = File(...)):
     if len(raw) > MAX_BYTES:
         raise HTTPException(413, "File is larger than 25 MB.")
     name = file.filename or "data.csv"
-    if name.lower().endswith((".xlsx", ".xls")):
-        raise HTTPException(400, "Excel files aren't read here yet. Save the sheet as CSV, or copy the cells and paste them.")
+    lower = name.lower()
+    if lower.endswith((".xlsx", ".xlsm")):
+        return _store_workbook(raw, _safe_name(name, ".xlsx"))
+    if lower.endswith(".xls"):
+        raise HTTPException(400, "That's the old Excel format (.xls). Open it in Excel and save it as .xlsx, then add it again.")
+    if lower.endswith(".numbers"):
+        raise HTTPException(400, "Numbers files can't be read directly. In Numbers, choose File > Export To > Excel, "
+                                 "then add the .xlsx file.")
     return _store(raw, _safe_name(name))
 
 
@@ -151,15 +203,48 @@ def paste(body: PasteBody):
 
 @router.get("/api/science/datasets/{dataset_id}/data")
 def download(dataset_id: str):
+    """The original file, exactly as added. The reproduction script starts from it."""
     ds = _get(dataset_id)
-    return Response(ds["raw"], media_type="text/csv",
-                    headers={"Content-Disposition": f'attachment; filename="{ds["name"]}"'})
+    kind = ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if ds.get("workbook") else "text/csv")
+    return Response(ds["raw"], media_type=kind, headers={"Content-Disposition": f'attachment; filename="{ds["name"]}"'})
+
+
+@router.get("/api/science/datasets/{dataset_id}/tidy")
+def download_tidy(dataset_id: str):
+    """The table the analysis uses, one row per measurement."""
+    ds = _get(dataset_id)
+    name = ds["name"].rsplit(".", 1)[0] + " (tidy).csv"
+    return Response(ds["df"].to_csv(index=False), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.post("/api/science/datasets/{dataset_id}/confirm")
+def confirm(dataset_id: str):
+    """The person has checked how the workbook was read."""
+    ds = _get(dataset_id)
+    ds["confirmed"] = True
+    return _describe(dataset_id)
+
+
+@router.post("/api/science/datasets/{dataset_id}/reread")
+def reread(dataset_id: str, body: RereadBody):
+    """Reads the same workbook again with a different option (keep the sheet's spelling, or use another sheet)."""
+    ds = _get(dataset_id)
+    if not ds.get("workbook"):
+        raise HTTPException(400, "Only workbooks can be read again.")
+    return _store_workbook(ds["raw"], ds["name"], body.model_dump(exclude_defaults=True))
+
+
+def _ready(ds: dict) -> None:
+    if not ds.get("confirmed"):
+        raise HTTPException(400, "First check how the workbook was read, and click \"That's right\" if it is.")
 
 
 @router.post("/api/science/readback")
 def readback(body: SpecBody):
     """The sentence saying what will run, written by code, and anything that stops it running."""
     ds = _get(body.dataset_id)
+    _ready(ds)
     spec = _spec(body.spec)
     problem: Optional[str] = None
     try:
@@ -172,6 +257,7 @@ def readback(body: SpecBody):
 @router.post("/api/science/run")
 def run(body: SpecBody):
     ds = _get(body.dataset_id)
+    _ready(ds)
     spec = _spec(body.spec)
     try:
         result = engine.run(ds["df"], spec)
@@ -184,5 +270,10 @@ def run(body: SpecBody):
                  "random_steps": (f"Dunnett's test estimates its P values and intervals by quasi-Monte Carlo with a fixed "
                                    f"seed ({engine.SEED}), so they repeat exactly" if result.get("pair_method") == "Dunnett's test"
                                    else "none")}
-    rep.script = script.build(spec, ds["name"], ds["sha"], script_block(ds["prep"]))
+    book = ds.get("workbook")
+    rep.script = script.build(spec, ds["name"], ds["sha"], script_block(ds["prep"]),
+                              plan=book["plan"] if book else None, table_sha=book["table_sha"] if book else None)
+    if book:
+        rep.prep = [f"Read {ds['name']} by fixed rules: " + book["summary"]["layout"].lower() + "."] + \
+            book["summary"]["checks"] + [f"Skipped {s['sheet']} ({s['why']})." for s in book["summary"]["skipped"]]
     return rep.model_dump()

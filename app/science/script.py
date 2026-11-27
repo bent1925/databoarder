@@ -15,6 +15,7 @@ import scipy
 import statsmodels
 
 ENGINE = Path(__file__).with_name("engine.py")
+SHEETS = Path(__file__).with_name("sheets.py")
 
 
 def versions() -> dict:
@@ -22,13 +23,32 @@ def versions() -> dict:
             "scipy": scipy.__version__, "statsmodels": statsmodels.__version__}
 
 
-def build(spec: dict, data_name: str, data_sha: str, prep_block: str) -> str:
-    engine = ENGINE.read_text().replace("from __future__ import annotations\n", "", 1)
+def _source(path: Path) -> str:
+    return path.read_text().replace("from __future__ import annotations\n", "", 1)
+
+
+def build(spec: dict, data_name: str, data_sha: str, prep_block: str, plan: dict | None = None,
+          table_sha: str | None = None) -> str:
+    engine = _source(ENGINE)
+    if plan:
+        load = f'''
+# --- Reading the workbook: the layout you confirmed, as exact cell positions ---
+PLAN = json.loads({json.dumps(json.dumps(plan, ensure_ascii=False), ensure_ascii=False)})
+TABLE_SHA256 = {table_sha!r}
+
+{_source(SHEETS)}
+
+df = build_table(raw, PLAN)
+if table_sha256(df) != TABLE_SHA256:
+    sys.exit("The workbook was read differently from the report. Check the library versions above.")
+'''
+    else:
+        load = "df = pd.read_csv(io.BytesIO(raw))\n" + prep_block
     built = ", ".join(f"{k} {v}" for k, v in versions().items())
     return f'''from __future__ import annotations
 # Databoarder science mode: reproduction script.
 # Put it in the same folder as {data_name}, then run: python this_script.py
-# It prints every number in the report as JSON. Nothing in it is random.
+# It prints every number in the report as JSON. The only random step (inside Dunnett's test) uses a fixed seed.
 # Built with: {built}
 
 import hashlib
@@ -44,8 +64,7 @@ DATA_SHA256 = {data_sha!r}
 raw = open(DATA_FILE, "rb").read()
 if hashlib.sha256(raw).hexdigest() != DATA_SHA256:
     sys.exit(f"{{DATA_FILE}} isn't the file the report used (its fingerprint differs). Use the original file.")
-df = pd.read_csv(io.BytesIO(raw))
-{prep_block}
+{load}
 # --- The choices you confirmed ---
 SPEC = json.loads({json.dumps(json.dumps(spec, ensure_ascii=False), ensure_ascii=False)})
 

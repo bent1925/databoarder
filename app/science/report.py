@@ -73,6 +73,13 @@ def followup_test(spec: dict) -> str:
     return "Tukey's test" if spec["followup"] == "all_pairs" else "Dunnett's test"
 
 
+def _a(name: str) -> str:
+    """'a paired t test', 'an ordinary one-way ANOVA', "Welch's ANOVA"."""
+    if "'s " in name:
+        return name
+    return ("an " if name[0].lower() in "aeiou" else "a ") + name
+
+
 def method_why(spec: dict) -> str:
     k, paired, ranks = len(spec["groups"]), spec["paired"], spec["method"] == "ranks"
     bits = []
@@ -117,11 +124,13 @@ def readback(spec: dict) -> str:
                  else f"'{spec['value_col']}' for the groups {_listing([repr(g) for g in spec['groups']])} "
                       f"of '{spec['group_col']}'")
         text = (f"Compare {where}, " + ("measured on the same subjects" if spec["paired"] else "each a separate set of "
-                                        "subjects") + f", using the {main_test(spec)}.")
+                                        "subjects") + f", using {_a(main_test(spec))}.")
         f = followup_test(spec)
         if f:
             text += (f" Then compare each group with '{spec['control']}'" if spec["followup"] == "vs_control"
                      else " Then compare every pair of groups") + f" ({f})."
+        if spec.get("subset_col"):
+            text += f" Only rows where '{spec['subset_col']}' is {spec['subset_value']} are used."
         text += " Empty cells are left out."
         if spec["paired"]:
             text += " Subjects not measured in every group are left out."
@@ -296,6 +305,12 @@ def _groups_report(spec: dict, r: dict) -> dict:
         audit.append(_item(f"{p['b']} vs {p['a']}: adjusted P", pval(p["p_adj"]), "p_adj", f'result["pairs"][{i}]["p_adj"]'))
 
     # --- checks
+    kept = r["left_out"].get("rows_kept")
+    if kept:
+        checks.append(Check(name="Part of the data", status="info", message=(
+            f"Only rows where {kept['column']} is {kept['value']} were used ({kept['kept']} of {kept['of']}). Pick the "
+            f"{kept['column'].lower()} before looking at results: testing each one separately and reporting the "
+            "clearest makes a false alarm much more likely.")))
     dropped = sum(r["left_out"]["empty_values"].values())
     if dropped:
         per = ", ".join(f"{n}: {c}" for n, c in r["left_out"]["empty_values"].items() if c)
