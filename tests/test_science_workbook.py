@@ -319,3 +319,33 @@ def test_reading_again_keeps_earlier_choices():
     kept = client.post(f"/api/science/datasets/{d['dataset_id']}/reread", json={"keep_spelling": True}).json()
     again = client.post(f"/api/science/datasets/{kept['dataset_id']}/reread", json={"first_row": "values"}).json()
     assert "drug 25mg/lg" in [g["name"] for g in again["workbook"]["groups"]]
+
+
+def test_a_labelled_day_with_no_numbers_is_kept_and_listed():
+    def fill(book):
+        for g in ("Ctrl", "Drug"):
+            ws = book.create_sheet(g)
+            ws.append(["Mouse", "Day 1", "Day 4", "Day 8", "Notes"])
+            for a in range(3):
+                ws.append([f"m{a}", 2 + a, 3.5 + 1.3 * a + (0.4 if g == "Drug" else 0) * (a % 2),
+                           "dead" if a == 0 else None, "fine"])
+    raw = book_of(fill)
+    found = workbook.propose(raw)
+    summary = found["summary"]
+    assert summary["times"] == [1, 4, 8]                                   # "Notes" isn't a time point
+    assert any("(Day 8) has no numbers on any sheet" in c for c in summary["checks"])
+    assert any("cell D2 says 'dead'" in c for c in summary["checks"])
+    table = sheets.build_table(raw, found["plan"])
+    assert table.loc[table.Day == 8, "Value"].isna().all() and len(table) == 2 * 3 * 3
+    spec = dict(analysis="time_course", group_col="Group", time_col="Day", value_col="Value", subject_col="Animal",
+                groups=["Ctrl", "Drug"], times=["1", "4", "8"], followup="none")
+    with pytest.raises(engine.EngineError, match="fewer than 2 subjects measured at every chosen time"):
+        engine.run(table, spec)
+    assert engine.run(table, {**spec, "times": ["1", "4"]})["n_subjects"] == 6
+
+
+def test_a_long_table_whose_only_category_is_the_day_still_loads():
+    df = pd.DataFrame({"Subject": [f"s{i}" for i in range(15) for _ in (0, 1)], "Day": ["Day 1", "Day 4"] * 15,
+                       "Value": np.arange(30.0)})
+    out = client.post("/api/science/upload", files={"file": ("t.csv", df.to_csv(index=False).encode(), "text/csv")})
+    assert out.status_code == 200 and "time_course" not in out.json()["guesses"]

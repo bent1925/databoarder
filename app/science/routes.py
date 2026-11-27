@@ -102,11 +102,11 @@ def guesses(df: pd.DataFrame, plan: Optional[dict] = None) -> dict:
     timeish = [c["name"] for c in cols if re.search(r"day|week|time|hour|visit|month", c["name"], re.I)
                and 2 <= c["distinct"] <= 30]
     repeats = [c["name"] for c in cols if not c["numeric"] and len(df) > c["distinct"] > 12]
-    if cats and timeish and repeats:
-        value = next((n for n in num if n not in timeish), None)
-        if value:
-            out["time_course"] = {"group_col": next(c for c in cats if c not in timeish), "time_col": timeish[0],
-                                  "value_col": value, "subject_col": repeats[0]}
+    group = next((c for c in cats if c not in timeish), None)       # the time column can't also be the group
+    value = next((n for n in num if n not in timeish), None)
+    if group and value and timeish and repeats:
+        out["time_course"] = {"group_col": group, "time_col": timeish[0], "value_col": value,
+                              "subject_col": repeats[0]}
     return out
 
 

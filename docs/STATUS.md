@@ -16,7 +16,7 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 - **Science mode (branch `science-mode`, PR #14 open for review, 2026-11-26).** Ben asked to try a mode for
   scientific analysis, with a more scientific but still playful style and the analyses GraphPad Prism offers. It's a
   separate page at `/science` with a lab-notebook look. The campaign screens are unchanged apart from a link.
-  412 tests pass, 13 of them browser tests. Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
+  414 tests pass, 13 of them browser tests. Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
   In PR #14:
   - **Analyses:** t tests, one-way ANOVA (Welch's or ordinary) with Tukey, Dunnett or Games-Howell,
     repeated-measures ANOVA, rank-based tests, Fisher's exact test, chi-square, correlation.

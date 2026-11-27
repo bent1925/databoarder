@@ -49,6 +49,7 @@ class Sheet:
     title: Optional[str] = None
     not_numbers: list[tuple[str, str]] = field(default_factory=list)
     no_numbers: list[tuple[int, Optional[str]]] = field(default_factory=list)   # subject rows with no values at all
+    empty_cols: list[int] = field(default_factory=list)                         # labelled columns with no values
     candidate: Optional[dict] = None          # a first row of numbers that may be labels (1, 4, 8) rather than values
     header_from_numbers: bool = False
     cells: dict = field(default_factory=dict, repr=False)
@@ -105,6 +106,11 @@ def read_sheet(ws, numeric_header: Optional[bool] = None) -> Sheet:
     first_col = min(c for _, c in numeric)
     cols = sorted({c for _, c in numeric})
     header_row = max((r for (r, c) in cells if r < first_row and c in cols and (r, c) not in numeric), default=None)
+    if header_row:
+        # A column labelled as a time point ("Day 8") is kept even when it has no numbers (every animal blank or
+        # "dead"), so the missing day is shown and counted rather than silently lost.
+        cols = sorted(set(cols) | {c for (r, c) in cells if r == header_row and c > first_col and c not in cols
+                                   and _time(_text(cells[(r, c)]))})
     headers = {c: _text(cells[(header_row, c)]) for c in cols if header_row and (header_row, c) in cells}
     number_rows = sorted({r for r, _ in numeric})
     text_left = [c for c in range(first_col - 1, 0, -1) if any((r, c) in cells for r in number_rows)]
@@ -125,9 +131,11 @@ def read_sheet(ws, numeric_header: Optional[bool] = None) -> Sheet:
     not_numbers = [(f"{get_column_letter(c)}{r}", _text(cells[(r, c)])) for r in rows for c in cols
                    if (r, c) in cells and (r, c) not in numeric]
     no_numbers = [(r, row_labels.get(r)) for r in rows if not any((r, c) in numeric for c in cols)]
+    empty_cols = [c for c in cols if not any((r, c) in numeric for r in rows)]
     return Sheet(ws.title, "data", texts=texts, rows=rows, cols=cols, header_row=header_row, headers=headers,
                  row_labels=row_labels, label_col=label_col, title=next((t for t in above if t), None),
-                 not_numbers=not_numbers, no_numbers=no_numbers, candidate=candidate, header_from_numbers=as_header,
+                 not_numbers=not_numbers, no_numbers=no_numbers, empty_cols=empty_cols, candidate=candidate,
+                 header_from_numbers=as_header,
                  cells=cells)
 
 
@@ -228,6 +236,18 @@ def _sheet_per_group(data: list[Sheet], sheets: list[Sheet], skipped: list[dict]
         for name in (n for n, v in seen.items() if v is None):
             filled.setdefault(name, []).append((get_column_letter(c), f"{unit or ''} {value}".strip()))
         columns.append({"col": c, "label": value, "unit": unit})
+    for c in cols:
+        if all(c in x.empty_cols for x in data):
+            label = next((x.headers.get(c) for x in data if x.headers.get(c)), get_column_letter(c))
+            checks.append(f"Column {get_column_letter(c)} ({label}) has no numbers on any sheet. It's kept, so every "
+                          f"subject counts as missing it: leave it out when choosing the {label.split()[0].lower()}s "
+                          "to analyze.")
+        else:
+            bare = [x.name for x in data if c in x.empty_cols]
+            if bare:
+                label = next((x.headers.get(c) for x in data if x.headers.get(c)), get_column_letter(c))
+                checks.append(f"{_names(bare)} {'has' if len(bare) == 1 else 'have'} no numbers in column "
+                              f"{get_column_letter(c)} ({label}). Those subjects count as missing it.")
     for name, gaps in filled.items():
         many = len(gaps) > 1
         checks.append(f"{name} has no label{'s' if many else ''} above column{'s' if many else ''} "
