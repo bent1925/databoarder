@@ -3,7 +3,7 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-26
+**Last updated:** 2026-11-27
 
 ## How we work
 
@@ -13,11 +13,11 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 ## Right now
 
-- **Science mode (branch `science-mode`, PR #14 open for review, 2026-11-26).** Ben asked to try a mode for
+- **Science mode (merged to `main` in PR #14, 2026-11-27, after two rounds of Codex review).** Ben asked to try a mode for
   scientific analysis, with a more scientific but still playful style and the analyses GraphPad Prism offers. It's a
   separate page at `/science` with a lab-notebook look. The campaign screens are unchanged apart from a link.
   414 tests pass, 13 of them browser tests. Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
-  In PR #14:
+  What's in it:
   - **Analyses:** t tests, one-way ANOVA (Welch's or ordinary) with Tukey, Dunnett or Games-Howell,
     repeated-measures ANOVA, rank-based tests, Fisher's exact test, chi-square, correlation.
   - **Excel workbooks with one sheet per group** (animals down, days across) are read by fixed rules with one
@@ -34,9 +34,10 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   3. Analysing the logarithm of a measurement, as a choice made before running (for skewed values like volumes).
   4. A check that groups vary alike over time (currently a "you confirm" assumption).
   Then ask the potential customer which Prism analyses they run each month, and reorder phases 3–9 to match.
-- **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6), and question
+- **Branch:** `main`. Also merged: phases 1 and 2 of the one-screen combine flow (PRs #5 and #6) and question
   recommender phase 1 (PR #8, labelled cases and the scoring harness, no app change), all reviewed by Codex.
-  All 315 tests pass, including 7 browser tests.
+  All 414 tests pass on `main`, including 13 browser tests. PR #13 (the customer to-do list) is still open, and
+  needs its `STATUS.md` changes merged with this file.
 - **Recommender baseline:** `.venv/bin/python -m evals.recommender`. Labels reviewed by Ben (2026-11-17 and 18,
   branch `review-checkout-labels`). Against them, today's suggestions (Baseline A) put a well-fitting question in
   the top 3 for 38% of cases (37% with renamed columns), and never say "can't answer". Weakest: LaLonde 6%,
@@ -113,9 +114,10 @@ connections, and monthly reruns with the same choices.
 
 ## Waiting on you
 
-- **Study details already on GitHub (2026-11-26).** The repo is public. Earlier science-mode commits include the
-  group names and file name from Ben's workbook (no measurements). Decide whether to leave them, remove them from the
-  current files, rewrite the branch history, or make the repo private.
+- **Study details already on GitHub (2026-11-26).** The repo is public. Science-mode commits, now in `main`'s
+  history too, include the group names and file name from Ben's workbook (no measurements). Decide whether to leave
+  them, remove them from the current files, or make the repo private. Rewriting history would now mean force-pushing
+  `main`.
 - **A question about the workbook's baseline values,** raised in the session, for whoever made the file.
 - **Real-model test of AI suggestions.** Needs an API key and costs money. Run
   `ANTHROPIC_API_KEY=… .venv/bin/python -m evals.recipe_cases`, or give me the key.
