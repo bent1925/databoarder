@@ -8,7 +8,7 @@ Ask a business question, upload a CSV, and get a plain-language answer with the 
 A working demo. The analyses, the one-screen combine flow and its browser tests are done.
 In progress: AI suggestions for the combine screen's answers, and better ranking of the ready-made questions
 (today a well-fitting one is in the top 3 for 38% of test cases). Not yet suitable for real customer data: there
-is one shared password, and uploads are kept in memory. Science mode for lab data (`/science`) is a first try, on branch `science-mode`. Details and next steps: [docs/STATUS.md](docs/STATUS.md).
+is one shared password, and uploads are kept in memory. Science mode for lab data (`/science`) is a first try, merged 2026-11-27. Details and next steps: [docs/STATUS.md](docs/STATUS.md).
 
 ## How it works, step by step
 1. **Add the data you want to analyze.** A CSV with one row per person, order or day. The app tidies obvious formatting problems and lists exactly what it changed. If you have several files or a messy Excel export, use **Put them together first** (see [Putting files together](#putting-files-together-appcombinepy)): add everything your analyst sent, check a few numbers about the finished table, and answer the few choices that change the answer. Nothing is used until you've confirmed them.

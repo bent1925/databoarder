@@ -1,6 +1,6 @@
 # Plan: Science mode
 
-Status (2026-11-26): phase 1 built on branch `science-mode`. It's a first try at whether Databoarder works for lab
+Status (2026-11-27): phase 1, Excel workbooks and two-way repeated-measures ANOVA merged to `main` (PR #14). It's a first try at whether Databoarder works for lab
 scientists who use GraphPad Prism today (see "To do: from a talk with a potential customer" in
 [../STATUS.md](../STATUS.md)).
 
