@@ -12,6 +12,8 @@ Analyses:
   contingency     Fisher's exact test, relative risk, odds ratio and risk difference (2x2); chi-square and
                   Cramer's V (bigger tables).
   correlation     Pearson or Spearman, with a 95% interval.
+  time_course     two-way repeated-measures ANOVA (group x time, Greenhouse-Geisser), with Welch t tests between
+                  groups at each time, Holm-adjusted.
 """
 from __future__ import annotations
 
@@ -534,9 +536,146 @@ def correlation(df: pd.DataFrame, spec: dict) -> dict:
     return result
 
 
+# ----------------------------------------------------------------------------- time course (two-way repeated measures)
+
+def _time_key(label: str):
+    """Days sort as numbers (2 before 10); other labels keep their order."""
+    try:
+        return (0, float(label), "")
+    except ValueError:
+        return (1, 0.0, label)
+
+
+def time_course(df: pd.DataFrame, spec: dict) -> dict:
+    """Two-way repeated-measures ANOVA: groups of different subjects, each subject measured at every time point.
+
+    Sums of squares are the classic split-plot ones (with unequal group sizes, the time effect weights each group by
+    its size). The time and group-by-time tests use the Greenhouse-Geisser correction, with epsilon from the
+    covariance of the time points within groups, pooled across groups. Follow-ups compare groups at each time with
+    Welch t tests, Holm-adjusted across every comparison made."""
+    groups, times = list(spec["groups"]), [str(t) for t in spec["times"]]
+    if len(groups) < 2:
+        raise EngineError("Choose at least two groups.")
+    if len(times) < 2:
+        raise EngineError("Choose at least two time points.")
+    for key in ("group_col", "time_col", "value_col", "subject_col"):
+        if spec.get(key) not in df.columns:
+            raise EngineError(f"Column '{spec.get(key)}' isn't in your table.")
+    if len({spec["group_col"], spec["time_col"], spec["value_col"], spec["subject_col"]}) < 4:
+        raise EngineError("The group, time, measurement and subject columns must all be different.")
+    if not pd.api.types.is_numeric_dtype(df[spec["value_col"]]):
+        raise EngineError(f"'{spec['value_col']}' has values that aren't numbers.")
+    long = pd.DataFrame({"group": _labels(df[spec["group_col"]]), "time": _labels(df[spec["time_col"]]),
+                         "subject": _labels(df[spec["subject_col"]]), "value": df[spec["value_col"]].astype(float)})
+    for value, column, name in [(g, "group", spec["group_col"]) for g in groups] + \
+                               [(t, "time", spec["time_col"]) for t in times]:
+        if value not in set(long[column].dropna()):
+            raise EngineError(f"'{value}' isn't one of the values of '{name}'.")
+    long = long[long["group"].isin(groups) & long["time"].isin(times)]
+    if long["subject"].isna().any():
+        raise EngineError(f"Some rows have no '{spec['subject_col']}', so they can't be followed over time.")
+    homes = long.groupby("subject")["group"].nunique()
+    if (homes > 1).any():
+        raise EngineError(f"'{homes[homes > 1].index[0]}' appears in more than one group. Each subject must belong "
+                          "to one group (if subjects are labelled 1, 2, 3 in every group, the labels need the group "
+                          "name too).")
+    repeats = long.duplicated(subset=["subject", "time"])
+    if repeats.any():
+        row = long[repeats].iloc[0]
+        raise EngineError(f"'{row['subject']}' has more than one value at {spec['time_col']} {row['time']}.")
+    empty = int(long["value"].isna().sum())
+    long = long.dropna(subset=["value"])
+    wide = long.pivot(index="subject", columns="time", values="value").reindex(columns=times)
+    complete = wide.dropna()
+    home = long.drop_duplicates("subject").set_index("subject")["group"]
+    left_out = {"empty_values": empty, "incomplete_subjects": int(len(wide) - len(complete)),
+                "incomplete_by_group": {g: int(((home.reindex(wide.index) == g) & wide.isna().any(axis=1)).sum())
+                                        for g in groups}}
+    blocks = [complete[home.reindex(complete.index) == g].to_numpy(float) for g in groups]
+    for g, y in zip(groups, blocks):
+        if len(y) < 2:
+            raise EngineError(f"'{g}' has fewer than 2 subjects measured at every chosen time point, so it can't be "
+                              "compared. Only subjects measured at every chosen time are used.")
+    a, b = len(groups), len(times)
+    n = np.array([len(y) for y in blocks])
+    ns = int(n.sum())
+    allv = np.vstack(blocks)
+    grand = allv.mean()
+    g_mean = np.array([y.mean() for y in blocks])                          # group means over subjects and times
+    t_mean = allv.mean(axis=0)                                             # time means over all subjects
+    cell = np.array([y.mean(axis=0) for y in blocks])                      # group x time means
+    ss_group = b * float(np.sum(n * (g_mean - grand) ** 2))
+    ss_subj = b * float(sum(np.sum((y.mean(axis=1) - y.mean()) ** 2) for y in blocks))
+    ss_time = ns * float(np.sum((t_mean - grand) ** 2))
+    ss_gt = float(np.sum(n[:, None] * (cell - g_mean[:, None] - t_mean[None, :] + grand) ** 2))
+    resid = np.vstack([y - y.mean(axis=1, keepdims=True) - c[None, :] + y.mean() for y, c in zip(blocks, cell)])
+    ss_err = float(np.sum(resid ** 2))
+    df_group, df_subj = a - 1, ns - a
+    df_time, df_gt, df_err = b - 1, (a - 1) * (b - 1), (ns - a) * (b - 1)
+    if df_subj < 1 or ss_err <= 0 or ss_subj <= 0:
+        raise EngineError("There's no variation left to test against: too few subjects, or values that are all the same.")
+    # Greenhouse-Geisser epsilon from the pooled within-group covariance of the time points.
+    pooled = sum((len(y) - 1) * np.cov(y, rowvar=False) for y in blocks) / df_subj
+    centre = np.eye(b) - np.ones((b, b)) / b
+    sc = centre @ pooled @ centre
+    eps = float(np.trace(sc) ** 2 / ((b - 1) * np.sum(sc * sc))) if b > 2 and np.sum(sc * sc) > 0 else 1.0
+    ms_err = ss_err / df_err
+
+    def within(name, key, ss, df):
+        f = (ss / df) / ms_err
+        return {"key": key, "name": name, "statistic_name": "F", "statistic": _f(f),
+                "df": f"{df * eps:.2f}, {df_err * eps:.2f}", "p": _f(stats.f.sf(f, df * eps, df_err * eps)),
+                "p_uncorrected": _f(stats.f.sf(f, df, df_err)), "partial_eta_squared": _f(ss / (ss + ss_err))}
+
+    f_group = (ss_group / df_group) / (ss_subj / df_subj)
+    tests = [within("Group × time", "interaction", ss_gt, df_gt),
+             {"key": "group", "name": "Group", "statistic_name": "F", "statistic": _f(f_group),
+              "df": f"{df_group}, {df_subj}", "p": _f(stats.f.sf(f_group, df_group, df_subj)),
+              "partial_eta_squared": _f(ss_group / (ss_group + ss_subj))},
+             within("Time", "time", ss_time, df_time)]
+    table = [{"source": "Group", "ss": _f(ss_group), "df": df_group},
+             {"source": "Subjects within groups", "ss": _f(ss_subj), "df": df_subj},
+             {"source": "Time", "ss": _f(ss_time), "df": df_time},
+             {"source": "Group × time", "ss": _f(ss_gt), "df": df_gt},
+             {"source": "Residual", "ss": _f(ss_err), "df": df_err}]
+
+    # Follow-ups: at each time, compare groups with Welch t tests, Holm-adjusted across every comparison.
+    pairs = []
+    for t in range(b):
+        for i, j in _pairs(groups, spec.get("followup", "none"), spec.get("control")):
+            x, y = blocks[i][:, t], blocks[j][:, t]
+            res = stats.ttest_ind(y, x, equal_var=False)
+            p = float(res.pvalue) if np.isfinite(res.pvalue) else 1.0
+            # Rounded far below anything shown, so equal means give exactly 0 rather than 4e-16.
+            pairs.append({"time": times[t], "a": groups[i], "b": groups[j], "diff": _f(round(float(y.mean() - x.mean()), 12)),
+                          "ci_low": None, "ci_high": None, "p_raw": _f(p)})
+    if pairs:
+        for row, p in zip(pairs, multipletests([r["p_raw"] for r in pairs], method="holm")[1]):
+            row["p_adj"] = _f(p)
+            row["clear"] = bool(p < ALPHA)
+    means = [{"group": g, "n": int(len(y)),
+              "points": [{"time": times[t], "mean": _f(y[:, t].mean()), "sd": _f(np.std(y[:, t], ddof=1)),
+                          "sem": _f(np.std(y[:, t], ddof=1) / math.sqrt(len(y))),
+                          "ci_low": _f(y[:, t].mean() - stats.t.ppf(0.975, len(y) - 1) * np.std(y[:, t], ddof=1) / math.sqrt(len(y))),
+                          "ci_high": _f(y[:, t].mean() + stats.t.ppf(0.975, len(y) - 1) * np.std(y[:, t], ddof=1) / math.sqrt(len(y)))}
+                         for t in range(b)],
+              "subjects": [[float(v) for v in row] for row in y]} for g, y in zip(groups, blocks)]
+    sds = [np.std(y, axis=0, ddof=1) for y in blocks]
+    spread = np.array(sds)
+    result = {"analysis": "time_course", "groups": groups, "times": times, "tests": tests, "anova_table": table,
+              "epsilon": _f(eps), "means": means, "pairs": pairs, "left_out": left_out, "n_subjects": ns,
+              "residual_normality": _normality(resid.ravel()),
+              "spread_ratio": _f(float(np.max(spread / spread.min(axis=0)))) if spread.min() > 0 else None,
+              "pair_method": "Welch t tests at each time, Holm-adjusted across all comparisons" if pairs else ""}
+    result["main_p"] = tests[0]["p"]
+    result["clear"] = bool(tests[0]["p"] is not None and tests[0]["p"] < ALPHA)
+    return result
+
+
 def run(df: pd.DataFrame, spec: dict) -> dict:
     """Every number in the report, from the prepared table and the confirmed choices."""
-    kinds = {"compare_groups": compare_groups, "contingency": contingency, "correlation": correlation}
+    kinds = {"compare_groups": compare_groups, "contingency": contingency, "correlation": correlation,
+             "time_course": time_course}
     if spec.get("analysis") not in kinds:
         raise EngineError("Unknown analysis.")
     return kinds[spec["analysis"]](df, spec)

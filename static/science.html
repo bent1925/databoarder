@@ -144,6 +144,8 @@
   td.v, td.num { font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
   tr.clear td { background: var(--lime-soft); }
   .results td:first-child { color: var(--muted); }
+  .results td.v { white-space: normal; overflow-wrap: anywhere; }
+  .results td:first-child { width: 40%; }
   .why { background: var(--teal-soft); border: 1.2px solid var(--ink); border-radius: 10px; padding: 10px 14px; margin-top: 14px; font-size: 14.5px; }
   .why b { font-family: var(--serif); }
   .item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14.5px; }
@@ -203,7 +205,7 @@
     <p class="step">Step 02 · the question</p>
     <h2>What do you want to know?</h2>
     <div class="qs" id="qs"></div>
-    <div class="soon">Coming next: <span class="chip">two-way ANOVA</span><span class="chip">mixed-effects models</span><span class="chip">dose-response &amp; curve fits</span><span class="chip">survival curves</span><span class="chip">regression</span><span class="chip">ROC &amp; Bland-Altman</span><span class="chip">PCA &amp; clustering</span><span class="chip">sample size</span><span class="chip">figures for papers</span></div>
+    <div class="soon">Coming next: <span class="chip">two-way ANOVA without repeats</span><span class="chip">mixed-effects models</span><span class="chip">dose-response &amp; curve fits</span><span class="chip">survival curves</span><span class="chip">regression</span><span class="chip">ROC &amp; Bland-Altman</span><span class="chip">PCA &amp; clustering</span><span class="chip">sample size</span><span class="chip">figures for papers</span></div>
   </section>
 
   <section class="card hidden" id="s3">
@@ -330,6 +332,8 @@ function hideFrom(n) {
 const QUESTIONS = [
   { k: "compare_groups", e: "📊", t: "Do groups differ?", s: "Compare a measurement across 2 or more groups or time points.",
     tests: "t tests · ANOVA · Tukey · Dunnett · Mann-Whitney · Kruskal-Wallis · Friedman" },
+  { k: "time_course", e: "⏱️", t: "How do groups change over time?", s: "The same subjects measured on several days, in 2 or more groups.",
+    tests: "two-way repeated-measures ANOVA · comparisons at each day" },
   { k: "contingency", e: "🧮", t: "Are categories related?", s: "Counts: how many in each group had each outcome.",
     tests: "Fisher's exact · chi-square · relative risk · odds ratio" },
   { k: "correlation", e: "📈", t: "Do two measurements move together?", s: "Two numbers measured on the same samples.",
@@ -345,6 +349,10 @@ function pickQuestion(k) {
   Object.entries(g).forEach(([key, v]) => { if (v !== null && v !== undefined) { S.c[key] = v; S.guessed.add(key); } });
   if (k === "compare_groups" && S.c.layout === "long" && S.c.group_col) { S.c.groups = levels(S.c.group_col); S.guessed.add("groups"); }
   if (k === "contingency") fillContingency();
+  if (k === "time_course") {
+    if (S.c.group_col) { S.c.groups = levels(S.c.group_col); S.guessed.add("groups"); }
+    if (S.c.time_col) { S.c.times = timeLevels(S.c.time_col); S.guessed.add("times"); }
+  }
   if (k === "compare_groups" && !S.c.layout) { S.c.layout = "wide"; S.guessed.add("layout"); }
   if (k === "contingency" && !S.c.layout) { S.c.layout = "rows"; S.guessed.add("layout"); }
   renderQuestions(); hideFrom(4);
@@ -449,6 +457,24 @@ function setupContingency() {
   return h;
 }
 
+const timeLevels = (name) => { const l = [...levels(name)]; return l.every((x) => !isNaN(+x)) ? l.sort((a, b) => +a - +b) : l; };
+
+function setupTimeCourse() {
+  const c = S.c, cats = allCols().filter((x) => levels(x).length >= 2);
+  let h = `<div class="grid2"><div><label>Group column ${tag("group_col")}</label>${select("group_col", cats)}</div>
+    <div><label>Time column ${tag("time_col")}</label>${select("time_col", cats)}</div>
+    <div><label>Measurement column ${tag("value_col")}</label>${select("value_col", numeric())}</div>
+    <div><label>Subject column ${tag("subject_col")}</label>${select("subject_col", allCols())}</div></div>`;
+  if (c.group_col) h += choice("Which groups?", "groups", "Click in the order you want them shown.", chips("groups", levels(c.group_col)), false);
+  if (c.time_col) h += choice(`Which ${esc(c.time_col.toLowerCase())}s?`, "times", `Usually all of them. Leave out a ${esc(c.time_col.toLowerCase())} only for a reason decided before looking (for example, a measurement taken before treatment started). Subjects missing any chosen ${esc(c.time_col.toLowerCase())} are left out.`, chips("times", c.time_col ? timeLevels(c.time_col) : []), false);
+  const when = (c.time_col || "time").toLowerCase();
+  h += choice(`At each ${esc(when)}, which groups should be compared?`, "followup", `The ANOVA says whether the groups changed differently. These comparisons say on which ${esc(when)}s, with P values adjusted for every comparison made, so fewer comparisons give more power.`,
+    seg("followup", [{ v: "vs_control", l: "Each group vs a control" }, { v: "all_pairs", l: "Every pair" }, { v: "none", l: "None", s: "ANOVA only" }]));
+  if (c.followup === "vs_control") h += choice("Which group is the control?", "control", "", select("control", c.groups || []));
+  h += choice("Were subjects assigned to groups at random?", "assignment", "Only random assignment lets a difference be put down to the treatment.", seg("assignment", ASSIGN));
+  return h;
+}
+
 function setupCorrelation() {
   let h = `<div class="grid2"><div><label>X (across) ${tag("x_col")}</label>${select("x_col", numeric())}</div>
     <div><label>Y (up) ${tag("y_col")}</label>${select("y_col", numeric())}</div></div>`;
@@ -459,6 +485,15 @@ function setupCorrelation() {
 
 function missing() {
   const c = S.c, out = [];
+  if (S.analysis === "time_course") {
+    if (!c.group_col || !c.time_col || !c.value_col || !c.subject_col) out.push("the four columns");
+    if ((c.groups || []).length < 2) out.push("at least two groups");
+    if ((c.times || []).length < 2) out.push("at least two time points");
+    if (c.followup === undefined) out.push("which comparisons");
+    if (c.followup === "vs_control" && !c.control) out.push("the control");
+    if (!c.assignment) out.push("random assignment?");
+    return out;
+  }
   if (S.analysis === "compare_groups") {
     if (c.layout === "long" && (!c.group_col || !c.value_col)) out.push("the columns");
     if ((c.groups || []).length < 2) out.push("at least two groups");
@@ -483,7 +518,7 @@ function missing() {
 }
 
 function renderSetup() {
-  const make = { compare_groups: setupCompare, contingency: setupContingency, correlation: setupCorrelation }[S.analysis];
+  const make = { compare_groups: setupCompare, contingency: setupContingency, correlation: setupCorrelation, time_course: setupTimeCourse }[S.analysis];
   $("setup").innerHTML = make();
   const todo = missing();
   $("check").disabled = todo.length > 0;
@@ -510,6 +545,7 @@ function renderSetup() {
       S.c.groups = s.value ? levels(s.value) : []; S.guessed.add("groups"); S.c.control = null;
     }
     if (key === "subset_col") S.c.subset_value = null;
+    if (key === "time_col") { S.c.times = s.value ? timeLevels(s.value) : []; S.guessed.add("times"); }
     if (key === "row_col") { S.c.rows = s.value ? levels(s.value) : []; S.guessed.add("rows"); S.c.event = undefined; }
     if (key === "col_col") { S.c.cols = s.value ? levels(s.value) : []; S.guessed.add("cols"); S.c.event = undefined; }
     if (key === "label_col") { S.c.rows = s.value ? levels(s.value) : []; S.guessed.add("rows"); }
@@ -528,6 +564,12 @@ function renderSetup() {
 
 function buildSpec() {
   const c = S.c;
+  if (S.analysis === "time_course") {
+    const order = timeLevels(c.time_col);
+    return { analysis: "time_course", group_col: c.group_col, time_col: c.time_col, value_col: c.value_col, subject_col: c.subject_col,
+      groups: c.groups, times: [...c.times].sort((a, b) => order.indexOf(a) - order.indexOf(b)), followup: c.followup,
+      control: c.followup === "vs_control" ? c.control : null, assignment: c.assignment };
+  }
   if (S.analysis === "compare_groups") {
     const k = c.groups.length;
     return { analysis: "compare_groups", layout: c.layout, groups: c.groups, group_col: c.layout === "long" ? c.group_col : null,
@@ -668,6 +710,41 @@ function scatterChart(r) {
   return `<div class="fig">${s}<div class="cap"><b>Fig. 1</b> Each dot is one sample.${e.slope !== undefined ? " Dashed line: best straight line (least squares)." : ""}</div></div>`;
 }
 
+function courseChart(r) {
+  const res = r.result, numericT = res.times.every((t) => !isNaN(+t));
+  const tx = res.times.map((t, i) => numericT ? +t : i);
+  const W = 640, H = 320, L = 58, R = 14, T = 14, B = 44;
+  const vals = res.means.flatMap((m) => m.subjects.flat().concat(m.points.flatMap((p) => [p.ci_low, p.ci_high])));
+  const xt = numericT ? niceTicks(Math.min(...tx), Math.max(...tx)) : tx, yt = niceTicks(Math.min(...vals), Math.max(...vals));
+  const x0 = Math.min(xt[0], ...tx), x1 = Math.max(xt[xt.length - 1], ...tx), y0 = Math.min(yt[0], ...vals), y1 = Math.max(yt[yt.length - 1], ...vals);
+  const pad = (x1 - x0 || 1) * .03;
+  const X = (v) => L + (W - L - R) * (v - x0 + pad) / (x1 - x0 + 2 * pad), Y = (v) => T + (H - T - B) * (1 - (v - y0) / (y1 - y0 || 1));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Each group over time">`;
+  yt.forEach((t) => { s += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${L - 8}" y="${Y(t) + 4}" text-anchor="end">${fmt(t)}</text>`; });
+  (numericT ? xt : tx).forEach((t, i) => { s += `<text x="${X(t)}" y="${H - B + 18}" text-anchor="middle">${numericT ? fmt(t) : esc(short(res.times[i], 8))}</text>`; });
+  s += `<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  res.means.forEach((m, g) => { const c = COLORS[g % COLORS.length];
+    m.subjects.forEach((row) => { s += `<polyline fill="none" stroke="${c}" stroke-opacity=".22" stroke-width="1.2" points="${row.map((v, i) => `${X(tx[i])},${Y(v)}`).join(" ")}"/>`; }); });
+  res.means.forEach((m, g) => { const c = COLORS[g % COLORS.length], nudge = (g - (res.means.length - 1) / 2) * 3;
+    s += `<polyline fill="none" stroke="${c}" stroke-width="3" points="${m.points.map((p, i) => `${X(tx[i]) + nudge},${Y(p.mean)}`).join(" ")}"/>`;
+    m.points.forEach((p, i) => { const x = X(tx[i]) + nudge;
+      s += `<line x1="${x}" x2="${x}" y1="${Y(p.ci_low)}" y2="${Y(p.ci_high)}" stroke="${c}" stroke-width="1.6"/><circle cx="${x}" cy="${Y(p.mean)}" r="4.2" fill="${c}" stroke="var(--ink)" stroke-width=".8"/>`; }); });
+  s += `<text class="lbl" x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle">${esc(r.spec.time_col)}</text>`;
+  s += `<text class="lbl" x="14" y="${(H - B) / 2}" transform="rotate(-90 14 ${(H - B) / 2})" text-anchor="middle">${esc(short(r.spec.value_col, 30))}</text></svg>`;
+  const legend = res.means.map((m, g) => `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:11px;height:11px;background:${COLORS[g % COLORS.length]};border:1px solid var(--ink);vertical-align:-1px"></span> ${esc(m.group)}</span>`).join("");
+  return `<div class="fig">${s}<div class="cap">${legend}</div><div class="cap"><b>Fig. 1</b> Thick lines: each group's mean, with 95% confidence intervals. Faint lines: each subject.</div></div>`;
+}
+function courseTables(r) {
+  const res = r.result, when = r.spec.time_col;
+  let h = `<h4>Means at each ${esc(when.toLowerCase())}</h4><div class="scroll"><table><thead><tr><th>Group</th><th>n</th>${res.times.map((t) => `<th>${esc(when)} ${esc(t)}</th>`).join("")}</tr></thead><tbody>
+    ${res.means.map((m) => `<tr><td>${esc(m.group)}</td><td class="num">${m.n}</td>${m.points.map((p) => `<td class="num">${fmt(p.mean)} <span class="muted">± ${fmt(p.sd)}</span></td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <p class="muted" style="font-size:13px;margin:4px 0 0">Mean ± SD.</p>`;
+  h += `<h4>ANOVA table</h4><div class="scroll"><table><thead><tr><th>Source</th><th>Sum of squares</th><th>df</th></tr></thead><tbody>${res.anova_table.map((x) => `<tr><td>${esc(x.source)}</td><td class="num">${fmt(x.ss)}</td><td class="num">${x.df}</td></tr>`).join("")}</tbody></table></div>`;
+  if (res.pairs.length) h += `<h4>At each ${esc(when.toLowerCase())} <span class="muted" style="font:600 13px var(--sans)">${esc(res.pair_method)}</span></h4><div class="scroll"><table><thead><tr><th>${esc(when)}</th><th>Comparison</th><th>Mean diff.</th><th>Adjusted P</th><th>Clear?</th></tr></thead><tbody>
+    ${res.pairs.map((x) => `<tr class="${x.clear ? "clear" : ""}"><td class="num">${esc(x.time)}</td><td>${esc(x.b)} − ${esc(x.a)}</td><td class="num">${fmt(x.diff)}</td><td class="num">${x.p_adj < 0.0001 ? "< 0.0001" : x.p_adj.toFixed(4)}</td><td>${x.clear ? "Yes" : "No"}</td></tr>`).join("")}</tbody></table></div>`;
+  return h;
+}
+
 /* ---------- report ---------- */
 const STATUS = { pass: "✅", warn: "⚠️", fail: "❌", info: "💡" }, ASSUME = { ok: "✅", warn: "⚠️", manual: "🙋" };
 function groupTable(r) {
@@ -691,13 +768,13 @@ function countTable(r) {
 
 function renderReport(r) {
   const face = r.verdict === "clear_difference" ? "🔬" : "🤷";
-  const chart = r.analysis === "compare_groups" ? groupsChart(r) : r.analysis === "contingency" ? tableChart(r) : scatterChart(r);
+  const chart = r.analysis === "compare_groups" ? groupsChart(r) : r.analysis === "contingency" ? tableChart(r) : r.analysis === "time_course" ? courseChart(r) : scatterChart(r);
   let h = `<p class="step">Step 05 · the result</p>
     <div class="verdict ${r.verdict}"><div class="face">${face}</div><div><h3>${esc(r.headline)}</h3><p>${esc(r.answer)}</p><p class="muted">${esc(r.how_sure)}</p></div></div>
     <div class="causal">${esc(r.causal_label)}</div>
     ${chart}
     <h4>Results</h4><table class="results"><tbody>${r.results.map((f) => `<tr><td>${esc(f.label)}</td><td class="v">${esc(f.value)}</td></tr>`).join("")}</tbody></table>
-    ${r.analysis === "compare_groups" ? `<h4>The groups</h4>${groupTable(r)}${pairTable(r)}` : r.analysis === "contingency" ? `<h4>The counts</h4>${countTable(r)}` : ""}
+    ${r.analysis === "compare_groups" ? `<h4>The groups</h4>${groupTable(r)}${pairTable(r)}` : r.analysis === "contingency" ? `<h4>The counts</h4>${countTable(r)}` : r.analysis === "time_course" ? courseTables(r) : ""}
     <div class="why"><b>Why this test (${esc(r.method_name)})?</b> ${esc(r.method_why)}</div>
     ${r.checks.length ? `<h4>Checks</h4>${r.checks.map((c) => `<div class="item"><span class="s">${STATUS[c.status]}</span><span><b>${esc(c.name)}</b>${esc(c.message)}</span></div>`).join("")}` : ""}
     <h4>What this can't tell you</h4><ul class="plain">${r.cannot_tell.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>

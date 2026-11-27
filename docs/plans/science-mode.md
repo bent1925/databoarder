@@ -76,8 +76,17 @@ Decisions made in phase 1 (open to change):
 Ordered by how often labs use them. The first step is still to ask the potential customer which Prism analyses they
 actually run each month, and to reorder this list to match.
 
-2. **Grouped tables:** two-way ANOVA, and mixed-effects models for repeated measures with missing values. This needs
-   a careful choice of sums of squares (Type II or III) and of follow-up comparisons. statsmodels covers it.
+2. **Grouped tables.** *Done (2026-11-26): two-way repeated-measures ANOVA for time courses* ("How do groups change
+   over time?"). Group varies between subjects and time within them. It uses the classic split-plot sums of squares;
+   with unequal group sizes, the time effect weights groups by size. The Greenhouse-Geisser correction is always
+   applied to time and to group × time, with ε from the within-group covariance pooled across groups. The report
+   leads with the group × time interaction. Follow-ups compare groups at each time point with Welch t tests,
+   Holm-adjusted across every comparison. This was chosen over Prism's default (comparisons using the model's pooled
+   error), which assumes sphericity. Subjects missing any chosen time point are left out and counted. The sums of
+   squares are checked against nested models with a term for each subject, and with two time points the interaction
+   F equals a one-way ANOVA on each subject's change.
+   *Still to do:* mixed-effects models (to keep subjects with missing days), ordinary two-way ANOVA without repeats,
+   and a check that groups have similar covariance patterns (it's currently a "you confirm" assumption).
 3. **Figures for papers:** the same charts drawn by fixed code from the frozen data and confirmed choices, exported
    as SVG or PDF with the script that redraws them. Optional asterisks for adjusted P values.
 4. **Curve fitting:** dose-response (4-parameter logistic, EC50/IC50 with intervals), Michaelis-Menten, exponential

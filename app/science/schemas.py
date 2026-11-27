@@ -75,7 +75,29 @@ class CorrelationSpec(BaseModel):
     method: Literal["pearson", "spearman"]
 
 
-ScienceSpec = Annotated[Union[CompareGroupsSpec, ContingencySpec, CorrelationSpec], Field(discriminator="analysis")]
+class TimeCourseSpec(BaseModel):
+    """How do groups change over time? Each subject is in one group and measured at every time point."""
+    model_config = ConfigDict(extra="forbid")
+    analysis: Literal["time_course"] = "time_course"
+    group_col: str
+    time_col: str
+    value_col: str
+    subject_col: str
+    groups: list[str] = Field(min_length=2)
+    times: list[str] = Field(min_length=2, description="The time points to use, in order")
+    followup: Literal["all_pairs", "vs_control", "none"] = "none"
+    control: Optional[str] = None
+    assignment: Assignment = "unsure"
+
+    @model_validator(mode="after")
+    def _fits(self):
+        if self.followup == "vs_control" and self.control not in self.groups:
+            raise ValueError("Choose which group is the control.")
+        return self
+
+
+ScienceSpec = Annotated[Union[CompareGroupsSpec, ContingencySpec, CorrelationSpec, TimeCourseSpec],
+                        Field(discriminator="analysis")]
 
 
 class Finding(BaseModel):

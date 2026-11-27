@@ -95,10 +95,10 @@ Prism. Paste cells, or upload a CSV laid out one column per group or one row per
 with one sheet per group (animals down the side, days across). Workbooks are read by fixed rules: blank sheets are
 ignored, and anything inferred (a missing day label, a misspelt group name) is listed for one click of confirmation
 before anything runs. Then pick a question
-(do groups differ, are categories related, do two measurements move together) and answer the design questions:
+(do groups differ, how do groups change over time, are categories related, do two measurements move together) and answer the design questions:
 same subjects?, averages or ranks?, equal spread?, which pairs?, random assignment? Those answers decide the test:
 t tests, Welch's or ordinary one-way ANOVA with Tukey, Dunnett or Games-Howell, repeated-measures ANOVA with the
-Greenhouse-Geisser correction, Mann-Whitney, Kruskal-Wallis with Dunn, Wilcoxon, Friedman, Fisher's exact test with
+Greenhouse-Geisser correction, two-way repeated-measures ANOVA for time courses (group × day), Mann-Whitney, Kruskal-Wallis with Dunn, Wilcoxon, Friedman, Fisher's exact test with
 relative risk and odds ratio, chi-square, Pearson and Spearman. No AI is involved. The engine (`app/science/engine.py`)
 is copied word for word into the downloadable script, and the tests check that the script reproduces every number.
 Samples with planted answers: `static/science/` (made by `tools/make_science_samples.py`). Plan and later phases

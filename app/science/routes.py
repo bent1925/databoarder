@@ -75,7 +75,9 @@ def guesses(df: pd.DataFrame, plan: Optional[dict] = None) -> dict:
     if plan and plan["kind"] == "sheet_per_group":
         # Built from one sheet per group: compare the groups on one day (which day is the person's call).
         return {"compare_groups": {"layout": "long", "group_col": plan["group_name"], "value_col": plan["value_name"],
-                                   "subject_col": plan["subject_name"], "subset_col": plan["time_name"]}}
+                                   "subject_col": plan["subject_name"], "subset_col": plan["time_name"]},
+                "time_course": {"group_col": plan["group_name"], "time_col": plan["time_name"],
+                                "value_col": plan["value_name"], "subject_col": plan["subject_name"]}}
     cols = _profile(df)
     labels = [c["name"] for c in cols if not c["numeric"] and c["distinct"] == len(df)]
     cats = [c["name"] for c in cols if not c["numeric"] and 2 <= c["distinct"] <= 12 and c["distinct"] < len(df)]
@@ -95,6 +97,15 @@ def guesses(df: pd.DataFrame, plan: Optional[dict] = None) -> dict:
         out["contingency"] = {"layout": "counts", "label_col": labels[0], "cols": counts[:6]}
     if len(num) >= 2:
         out["correlation"] = {"x_col": num[0], "y_col": num[1]}
+    # A long table followed over time: a group, a time column, and subjects that repeat.
+    timeish = [c["name"] for c in cols if re.search(r"day|week|time|hour|visit|month", c["name"], re.I)
+               and 2 <= c["distinct"] <= 30]
+    repeats = [c["name"] for c in cols if not c["numeric"] and len(df) > c["distinct"] > 12]
+    if cats and timeish and repeats:
+        value = next((n for n in num if n not in timeish), None)
+        if value:
+            out["time_course"] = {"group_col": next(c for c in cats if c not in timeish), "time_col": timeish[0],
+                                  "value_col": value, "subject_col": repeats[0]}
     return out
 
 

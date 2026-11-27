@@ -118,3 +118,26 @@ def test_a_workbook_with_one_sheet_per_group(lab, tmp_path):
     lab.click("#run")
     lab.wait_for_selector("#report:not(.hidden) .verdict")
     assert lab.locator("#report svg circle").count() == 15
+
+
+def test_time_course_from_a_workbook(lab, tmp_path):
+    import importlib.util
+    found = importlib.util.spec_from_file_location("science_workbook_cases2", Path(__file__).parents[1] / "test_science_workbook.py")
+    cases = importlib.util.module_from_spec(found)
+    found.loader.exec_module(cases)
+    path = tmp_path / "House comparison.xlsx"
+    path.write_bytes(cases.make_book())
+    lab.set_input_files("#file", str(path))
+    lab.click("#wbok")
+    lab.click("text=How do groups change over time?")
+    assert lab.locator("#setup .tag.guess").count() >= 4               # all four columns guessed from the workbook
+    pick(lab, "followup", "Each group vs a control")
+    lab.select_option("select[data-sel=control]", "Vehicle Control")
+    pick(lab, "assignment", "Yes, at random")
+    lab.click("#check")
+    lab.wait_for_selector("#s4:not(.hidden)")
+    assert "two-way repeated-measures ANOVA" in lab.inner_text("#readback")
+    lab.click("#run")
+    lab.wait_for_selector("#report:not(.hidden) .verdict")
+    assert lab.locator("#report svg polyline").count() == 15 + 3       # every mouse, plus each group's mean
+    assert "Group × day" in lab.inner_text("#report .results")

@@ -150,6 +150,17 @@ def readback(spec: dict) -> str:
         if spec["layout"] == "rows":
             text += " Rows with other or empty values are left out."
         return text + " " + ASSIGN[spec.get("assignment", "unsure")]
+    if a == "time_course":
+        text = (f"Follow each '{spec['subject_col']}' over '{spec['time_col']}' ({_listing(spec['times'])}) and compare "
+                f"how '{spec['value_col']}' changes in the groups {_listing([repr(g) for g in spec['groups']])} of "
+                f"'{spec['group_col']}', using a two-way repeated-measures ANOVA (group × {spec['time_col'].lower()}, "
+                "Greenhouse-Geisser corrected).")
+        if spec.get("followup", "none") != "none":
+            who = (f"each group with '{spec['control']}'" if spec["followup"] == "vs_control" else "every pair of groups")
+            text += (f" Then, at each {spec['time_col'].lower()}, compare {who} (Welch t tests, Holm-adjusted across "
+                     "all of those comparisons).")
+        text += f" Subjects missing any of these {spec['time_col'].lower()}s are left out."
+        return text + " " + ASSIGN[spec.get("assignment", "unsure")]
     name = "Pearson (straight-line)" if spec["method"] == "pearson" else "Spearman (rank)"
     return (f"Measure how closely '{spec['y_col']}' moves with '{spec['x_col']}' using {name} correlation. "
             "Rows missing either value are left out.")
@@ -182,6 +193,9 @@ STATS = {
     "kendall_w": ("Kendall's W = χ²(Friedman) ÷ (n(k−1)).", "0 = conditions don't rank subjects consistently, 1 = "
                   "every subject ranks the conditions the same way."),
     "epsilon_squared": ("ε² = H ÷ (n − 1).", "Rough share of the variation in ranks that lines up with the groups."),
+    "epsilon_pooled": ("Greenhouse-Geisser ε from the covariance of the time points within groups, pooled across "
+                       "groups and double-centred. The time and group × time degrees of freedom are multiplied by it.",
+                       "1 = every pair of time points varies equally; smaller values make the test more cautious."),
     "epsilon": ("Greenhouse-Geisser ε from the double-centred covariance matrix; both degrees of freedom are "
                 "multiplied by it.", "1 = conditions vary equally; smaller values make the test more cautious."),
     "relative_risk": ("Risk in the first row ÷ risk in the second, 95% interval on the log scale (Katz).",
@@ -489,8 +503,125 @@ def _correlation_report(spec: dict, r: dict) -> dict:
                     "extreme values.")}
 
 
+def _time_report(spec: dict, r: dict) -> dict:
+    inter, group, time = r["tests"]
+    when = spec["time_col"].lower()
+    checks, findings, audit = [], [], []
+
+    # --- words: the interaction is the question "did the groups change differently?"
+    last = r["times"][-1]
+    ends = ", ".join(f"{m['group']} {num(m['points'][-1]['mean'])}" for m in r["means"])
+    if r["clear"]:
+        headline = f"The groups changed differently over {when}s."
+    elif (group["p"] or 1) < 0.05:
+        headline = f"The groups differ overall, but there's no clear sign they changed differently over {when}s."
+    else:
+        headline = f"No clear difference in how the groups changed over {when}s."
+    answer = f"Averages at {spec['time_col']} {last}: {ends}."
+    if r["pairs"]:
+        clear = [p for p in r["pairs"] if p["clear"]]
+        if clear:
+            by_time: dict = {}
+            for p in clear:
+                by_time.setdefault(p["time"], []).append(p["b"] if spec["followup"] == "vs_control" else f"{p['b']} vs {p['a']}")
+            against = f" (each group vs {spec['control']})" if spec["followup"] == "vs_control" else ""
+            answer += f" Clear in the follow-up tests{against}: " + "; ".join(
+                f"{spec['time_col']} {t}: {_listing(v)}" for t, v in by_time.items()) + "."
+        else:
+            answer += " No single comparison at any one " + when + " is clear in the follow-up tests."
+    how = (f"Group × {when}: {p_is(inter['p'])}. If the groups truly changed in the same way, a pattern like this "
+           f"would turn up {chance_phrase(inter['p'])}.")
+    if not r["clear"]:
+        how += " Not proof that they changed the same way: small groups often miss real differences."
+    if r["clear"]:
+        how += (f" Because the groups changed differently, the overall group and {when} effects below average over "
+                f"different patterns: read the {when}-by-{when} comparisons instead.")
+
+    # --- results table, Prism-style
+    findings.append(Finding(label="Test", value=f"Two-way repeated-measures ANOVA (Greenhouse-Geisser ε = {num(r['epsilon'])})"))
+    for t, label in ((inter, f"Group × {when} (do the groups change differently?)"),
+                     (group, "Group (do the groups differ, averaged over time?)"),
+                     (time, f"{spec['time_col']} (does the value change over time, averaged over groups?)")):
+        findings.append(Finding(label=label, value=f"F({t['df']}) = {num(t['statistic'])}, P {pval(t['p']) if pval(t['p']).startswith('<') else '= ' + pval(t['p'])}, partial η² = {num(t['partial_eta_squared'])}"))
+        audit.append(_item(f"{label}: P", pval(t["p"]), "p", f'result["tests"][{r["tests"].index(t)}]["p"]'))
+        audit.append(_item(f"{t['name']}: partial η²", num(t["partial_eta_squared"]), "eta_squared_partial",
+                           f'result["tests"][{r["tests"].index(t)}]["partial_eta_squared"]'))
+    findings.append(Finding(label="Subjects used", value=" · ".join(f"{m['group']}: {m['n']}" for m in r["means"])))
+    audit.append(_item("Greenhouse-Geisser ε", num(r["epsilon"]), "epsilon_pooled", 'result["epsilon"]'))
+    for i, m in enumerate(r["means"]):
+        for j, pt in enumerate(m["points"]):
+            audit.append(_item(f"{m['group']}, {spec['time_col']} {pt['time']}: mean and 95% CI",
+                               f"{num(pt['mean'])} ({num(pt['ci_low'])} to {num(pt['ci_high'])})", "mean_ci",
+                               f'result["means"][{i}]["points"][{j}]["mean"]'))
+    for i, p in enumerate(r["pairs"]):
+        audit.append(_item(f"{spec['time_col']} {p['time']}: {p['b']} vs {p['a']}, adjusted P", pval(p["p_adj"]),
+                           "p_adj", f'result["pairs"][{i}]["p_adj"]'))
+
+    # --- checks
+    lo = r["left_out"]
+    if lo["incomplete_subjects"]:
+        per = ", ".join(f"{g}: {c}" for g, c in lo["incomplete_by_group"].items() if c)
+        checks.append(Check(name="Incomplete subjects", status="warn", message=(
+            f"{lo['incomplete_subjects']} subject{'s were' if lo['incomplete_subjects'] > 1 else ' was'} missing at "
+            f"least one {when} and left out entirely ({per}). If they're missing for a reason linked to the result "
+            "(an animal culled because its tumour grew too big), leaving them out biases the answer. A mixed-effects "
+            "model can use their partial data; it isn't available yet.")))
+    small = [m["group"] for m in r["means"] if m["n"] < 5]
+    if small:
+        checks.append(Check(name="Small groups", status="warn", message=(
+            f"{_listing(small)} {'has' if len(small) == 1 else 'have'} fewer than 5 subjects. Only large differences "
+            "can be detected.")))
+    checks.append(Check(name="Sphericity", status="info", message=(
+        f"Greenhouse-Geisser ε = {num(r['epsilon'])} (1 means every pair of {when}s varies equally). The correction is "
+        "always applied, so this assumption isn't needed." + (" ε is well below 1 here, so the correction matters."
+                                                             if (r["epsilon"] or 1) < 0.75 else ""))))
+    pn = r["residual_normality"]["p"]
+    if pn is not None and pn < 0.05:
+        checks.append(Check(name="Shape of the values", status="warn", message=(
+            f"What's left after removing each subject's level and each group's time course doesn't look bell-shaped "
+            f"(Shapiro-Wilk {p_is(pn)}). With many values this check objects to small departures that don't matter; "
+            "with skewed measurements (sizes and concentrations often are), analysing their logarithm is common. Decide that "
+            "on scientific grounds, before looking at results.")))
+    else:
+        checks.append(Check(name="Shape of the values", status="info", message=(
+            "The leftover variation doesn't look clearly skewed (Shapiro-Wilk). That doesn't prove it's bell-shaped.")))
+    if (r["spread_ratio"] or 1) > 3:
+        checks.append(Check(name="Spread", status="warn", message=(
+            f"At some {when}, one group's SD is {num(r['spread_ratio'])} times another's. The ANOVA assumes groups "
+            "vary similarly at each time; the follow-up Welch tests don't.")))
+    if r["pairs"]:
+        checks.append(Check(name="Follow-up comparisons", status="info", message=(
+            f"{len(r['pairs'])} comparisons ({len(r['times'])} {when}s × {len(r['pairs']) // len(r['times'])} "
+            f"pair{'s' if len(r['pairs']) // len(r['times']) > 1 else ''}), Holm-adjusted together. Leaving out "
+            f"{when}s you don't care about (such as the first day, before treatment) gives the rest more power, but "
+            "choose them before looking.")))
+    assume = [
+        Assumption(status="manual", text="Each subject belongs to one group, and different subjects are independent "
+                   "(different animals or patients, not technical replicates)."),
+        Assumption(status="manual" if pn is None or pn >= 0.05 else "warn", text=(
+            "The leftover variation is roughly bell-shaped." + (" A check found no clear problem, which isn't proof."
+                                                                 if pn is None or pn >= 0.05 else " See checks."))),
+        Assumption(status="ok", text=(f"Not assumed: equal variation between every pair of {when}s (sphericity). "
+                                      f"The Greenhouse-Geisser correction is applied (ε = {num(r['epsilon'])}).")),
+        Assumption(status="manual", text=(f"The groups vary in a similar way over {when}s (their covariance "
+                                          "patterns are alike). It isn't checked here.")),
+    ]
+    cannot = ["Whether the difference matters scientifically: judge that from its size, not from the P value.",
+              f"What happens after the last {when} measured, or between the {when}s measured.",
+              "If you run several analyses on this data, these P values aren't adjusted for that."]
+    return {"headline": headline, "answer": answer, "how_sure": how, "checks": checks, "assumptions": assume,
+            "results": findings, "audit": audit, "cannot": cannot,
+            "method": "two-way repeated-measures ANOVA",
+            "why": (f"Each subject was measured at every {when}, and each belongs to one group. This test separates "
+                    f"three questions: do the groups change differently over {when}s (the group × {when} "
+                    f"interaction, usually the one that matters), do they differ overall, and does the value change "
+                    f"over {when}s. Comparing each {when} with separate tests instead would ignore that the same "
+                    f"subjects were measured each time, and multiply the chances of a false alarm.")}
+
+
 def build(spec: dict, result: dict) -> ScienceReport:
-    maker = {"compare_groups": _groups_report, "contingency": _table_report, "correlation": _correlation_report}
+    maker = {"compare_groups": _groups_report, "contingency": _table_report, "correlation": _correlation_report,
+             "time_course": _time_report}
     parts = maker[spec["analysis"]](spec, result)
     return ScienceReport(
         analysis=spec["analysis"], verdict="clear_difference" if result["clear"] else "no_clear_difference",
