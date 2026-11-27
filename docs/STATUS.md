@@ -3,7 +3,7 @@
 A running note of what we're working on, updated at the end of each work session.
 The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
-**Last updated:** 2026-11-25
+**Last updated:** 2026-11-26
 
 ## How we work
 
@@ -13,6 +13,27 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
 
 ## Right now
 
+- **Science mode (branch `science-mode`, PR #14 open for review, 2026-11-26).** Ben asked to try a mode for
+  scientific analysis, with a more scientific but still playful style and the analyses GraphPad Prism offers. It's a
+  separate page at `/science` with a lab-notebook look. The campaign screens are unchanged apart from a link.
+  414 tests pass, 13 of them browser tests. Plan and later phases: [plans/science-mode.md](plans/science-mode.md).
+  In PR #14:
+  - **Analyses:** t tests, one-way ANOVA (Welch's or ordinary) with Tukey, Dunnett or Games-Howell,
+    repeated-measures ANOVA, rank-based tests, Fisher's exact test, chi-square, correlation.
+  - **Excel workbooks with one sheet per group** (animals down, days across) are read by fixed rules with one
+    confirmation click. Blank sheets are ignored, and anything inferred is listed for checking.
+  - **Time courses:** two-way repeated-measures ANOVA (group × day, Greenhouse-Geisser) with Holm-adjusted
+    comparisons at each day. Groups can also be compared on one chosen day.
+  - The reproduction script contains the engine (and the workbook reader) word for word, and is tested against
+    the report.
+  Ben's own workbook (`sample_data/House comparison LA.xlsx`) runs end to end. It isn't in git, and its contents and
+  results are deliberately kept out of the repo, which is public.
+  **Next for science mode, each in its own PR (Ben, 2026-11-26):**
+  1. Mixed-effects models, so animals with a missing day are kept instead of left out.
+  2. Ordinary two-way ANOVA without repeated measures.
+  3. Analysing the logarithm of a measurement, as a choice made before running (for skewed values like volumes).
+  4. A check that groups vary alike over time (currently a "you confirm" assumption).
+  Then ask the potential customer which Prism analyses they run each month, and reorder phases 3–9 to match.
 - **Branch:** `main`. Phases 1 and 2 of the one-screen combine flow are merged (PRs #5 and #6), and question
   recommender phase 1 (PR #8, labelled cases and the scoring harness, no app change), all reviewed by Codex.
   All 315 tests pass, including 7 browser tests.
@@ -92,6 +113,10 @@ connections, and monthly reruns with the same choices.
 
 ## Waiting on you
 
+- **Study details already on GitHub (2026-11-26).** The repo is public. Earlier science-mode commits include the
+  group names and file name from Ben's workbook (no measurements). Decide whether to leave them, remove them from the
+  current files, rewrite the branch history, or make the repo private.
+- **A question about the workbook's baseline values,** raised in the session, for whoever made the file.
 - **Real-model test of AI suggestions.** Needs an API key and costs money. Run
   `ANTHROPIC_API_KEY=… .venv/bin/python -m evals.recipe_cases`, or give me the key.
 - **Deployment for real customer data.** One shared password isn't suitable. Options: a separate deployment

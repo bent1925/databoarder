@@ -7,9 +7,6 @@ Without them these tests are skipped, so the rest of the suite still runs anywhe
 """
 import importlib.util
 import json
-import socket
-import threading
-import time
 from pathlib import Path
 
 import numpy as np
@@ -18,9 +15,6 @@ import pytest
 
 sync_api = pytest.importorskip("playwright.sync_api", reason="Playwright isn't installed (see this file's docstring)")
 pytest.importorskip("openpyxl")
-import uvicorn  # noqa: E402
-
-from app import main  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("make_messy_hillstrom_browser", ROOT / "tools" / "make_messy_hillstrom.py")
@@ -46,33 +40,6 @@ def pulls(tmp_path_factory):
     tool.write_pull(pull, folder / "full")
     tool.write_pull(tool.treated_only(pull), folder / "treated")
     return {name: sorted(str(path) for path in (folder / name).iterdir()) for name in ("full", "treated")}
-
-
-@pytest.fixture(scope="module")
-def server():
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    running = uvicorn.Server(uvicorn.Config(main.app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=running.run, daemon=True)
-    thread.start()
-    deadline = time.time() + 10
-    while not running.started and time.time() < deadline:
-        time.sleep(0.05)
-    yield f"http://127.0.0.1:{port}"
-    running.should_exit = True
-    thread.join(timeout=5)
-
-
-@pytest.fixture(scope="module")
-def browser():
-    with sync_api.sync_playwright() as playwright:
-        try:
-            launched = playwright.chromium.launch()
-        except Exception as problem:     # the browser itself hasn't been downloaded
-            pytest.skip(f"Chromium for Playwright isn't installed ({type(problem).__name__}). See this file's docstring.")
-        yield launched
-        launched.close()
 
 
 @pytest.fixture
