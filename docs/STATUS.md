@@ -36,8 +36,7 @@ The full plan is in [plans/data-ingestion.md](plans/data-ingestion.md).
   Then ask the potential customer which Prism analyses they run each month, and reorder phases 3–9 to match.
 - **Branch:** `main`. Also merged: phases 1 and 2 of the one-screen combine flow (PRs #5 and #6) and question
   recommender phase 1 (PR #8, labelled cases and the scoring harness, no app change), all reviewed by Codex.
-  All 414 tests pass on `main`, including 13 browser tests. PR #13 (the customer to-do list) is still open, and
-  needs its `STATUS.md` changes merged with this file.
+  All 414 tests pass on `main`, including 13 browser tests.
 - **Recommender baseline:** `.venv/bin/python -m evals.recommender`. Labels reviewed by Ben (2026-11-17 and 18,
   branch `review-checkout-labels`). Against them, today's suggestions (Baseline A) put a well-fitting question in
   the top 3 for 38% of cases (37% with renamed columns), and never say "can't answer". Weakest: LaLonde 6%,
@@ -103,6 +102,29 @@ preparation steps, and gets one clean, frozen table that the existing analysis s
    forecasting, drivers. Not an up-front question yet; infer it from the goal and the table. Phase 2 adds a `task`
    field to candidates; phase 4 adds a `different_task` "can't answer" reason and test cases. New kinds of analysis
    only if real users ask. Details: [plans/recommender.md, "Kinds of question"](plans/recommender.md#kinds-of-question-noted-2026-11-14-for-later).
+
+## To do: from a talk with a potential customer (2026-11-25)
+
+Not yet planned or ordered against "Next up". Each needs a plan in `docs/plans/` before building.
+
+1. **A version of the screens for biomedical researchers and scientists.** Their words, examples and defaults
+   (e.g. "treatment arm", "outcome", study designs instead of campaigns), probably with more of the technical
+   detail shown by default.
+   **First try built:** science mode (`/science`, merged in PR #14; see "Right now"), with a lab-notebook look.
+   **They use GraphPad Prism today.** When this was written, Databoarder only covered comparing two groups. Science
+   mode adds more than two groups (ANOVA with corrected follow-up tests), paired and repeated-measures data
+   (including two-way repeated-measures ANOVA for time courses), non-parametric tests, contingency tables,
+   correlation, pasted small datasets, and Excel workbooks with one sheet per group. Still missing: dose-response
+   curve fits, survival curves, regression, and graphs for papers (item 2). Pitch it as "the right test, explained
+   and reproducible", not as a Prism replacement. **Ask them first:** which Prism analyses do
+   they actually run each month? That shows whether this is a few new analyses or a different product.
+2. **Graphs ready for a manuscript.** Figures to drop into a paper, drawn by fixed code from the same frozen
+   table and approved choices as the report, with exportable vector files and the script that redraws them.
+3. **An insight generator: "what sticks out in this data?"** Deliberately close to p-hacking; Ben wants to try it
+   to see what it looks like. To stay within the review rules in [AGENTS.md](../AGENTS.md), it would need to:
+   say how many things were looked at, correct for that (as the Research mode's Holm correction does), call
+   every finding a lead to check, never an answer, and say that checking a lead needs new data or a question
+   chosen before looking. Fixed code does the search; the AI may only describe what the code found.
 
 ## Open question: why not just use Claude or ChatGPT?
 
